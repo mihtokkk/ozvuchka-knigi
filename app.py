@@ -8,22 +8,22 @@ import os, re, time, tempfile, asyncio, subprocess
 import edge_tts
 import gradio as gr
 
-# --- Обработка голоса «Вера» (ffmpeg): тепло, де-эссер, лёгкая хрипотца-придыхание,
-#     короткие паузы. Применяется к каждому её фрагменту после синтеза. ---
-VERA_FX = (
-    "[0:a]highpass=f=80,equalizer=f=280:t=q:w=1.2:g=-1.5,bass=g=2:f=180,"
+# --- Обработка голоса «Вера» (ffmpeg, простая линейная цепочка -af): тепло, лёгкая
+#     хрипотца (сатурация), де-эссер против шипения, короткие паузы. Надёжно работает
+#     на любом сервере — без тяжёлых источников шума и микса. ---
+VERA_AF = (
+    "highpass=f=80,"
+    "equalizer=f=280:t=q:w=1.2:g=-1.5,"
+    "bass=g=2:f=180,"
     "acompressor=threshold=0.06:ratio=2.5:attack=15:release=220:makeup=2,"
-    "aexciter=amount=1.2:drive=4:blend=1:freq=6000:ceil=14000,"
-    "equalizer=f=6800:t=q:w=1.6:g=-3.5,treble=g=1.5:f=10000,"
-    "equalizer=f=4000:t=q:w=2:g=1,dynaudnorm=f=250:g=7[vpre];"
-    "[vpre]asplit=2[v][vkey];"
-    "anoisesrc=color=pink:amplitude=0.03:seed=7[n0];"
-    "[n0]highpass=f=3000,lowpass=f=7000[nf];"
-    "[nf][vkey]sidechaingate=threshold=0.03:ratio=5:attack=3:release=50[ng];"
-    "[ng]volume=0.3[ngl];"
-    "[v][ngl]amix=inputs=2:duration=first:normalize=0,"
+    "aexciter=amount=1.3:drive=5:blend=1:freq=6000:ceil=14000,"
+    "equalizer=f=1800:t=q:w=2:g=1.5,"
+    "asoftclip=type=tanh:threshold=0.85,"
+    "equalizer=f=6800:t=q:w=1.6:g=-3.5,"
+    "treble=g=1.5:f=10000,"
+    "dynaudnorm=f=250:g=7,"
     "silenceremove=stop_periods=-1:stop_duration=0.14:stop_threshold=-42dB:stop_silence=0.06,"
-    "alimiter=limit=0.95[out]"
+    "alimiter=limit=0.95"
 )
 
 # Каждый голос: базовый нейроголос + опц. сдвиг высоты/темпа + опц. обработка fx.
@@ -31,7 +31,7 @@ VOICES = {
     "Анна — женский, русский":      {"voice": "ru-RU-SvetlanaNeural"},
     "Дмитрий — мужской, русский":   {"voice": "ru-RU-DmitryNeural"},
     "Вера — тёплый, обработанный":  {"voice": "ru-RU-SvetlanaNeural",
-                                     "pitch": "+5Hz", "rate_bias": -2, "fx": VERA_FX},
+                                     "pitch": "+5Hz", "rate_bias": -2, "af": VERA_AF},
 }
 DEFAULT_NARR = "Анна — женский, русский"
 DEFAULT_CHAR = "Дмитрий — мужской, русский"
@@ -65,30 +65,39 @@ async def _save(text, voice, rate, pitch, out):
 def _ffmpeg(args):
     subprocess.run(["ffmpeg", "-y"] + args, check=True, capture_output=True)
 
-def _finalize(src, dst, fx):
-    """Приводит фрагмент к единому формату 44.1кГц/192к; для «Веры» прогоняет обработку."""
-    if fx:
-        _ffmpeg(["-i", src, "-filter_complex", fx, "-map", "[out]",
-                 "-c:a", "libmp3lame", "-b:a", "192k", "-ar", "44100", dst])
-    else:
-        _ffmpeg(["-i", src, "-c:a", "libmp3lame", "-b:a", "192k", "-ar", "44100", dst])
+def _finalize(src, dst, af):
+    """Приводит фрагмент к единому формату 44.1кГц/192к; для «Веры» прогоняет обработку.
+    Запасной план: если обработка почему-то упала — выдаём простой звук, без неё,
+    чтобы голос всё равно звучал (а причину пишем в лог)."""
+    if af:
+        try:
+            _ffmpeg(["-i", src, "-af", af,
+                     "-c:a", "libmp3lame", "-b:a", "192k", "-ar", "44100", dst])
+            return
+        except subprocess.CalledProcessError as e:
+            err = (e.stderr or b"").decode("utf-8", "ignore")[-600:]
+            print("[Вера] обработка не прошла, выдаю без неё. ffmpeg:", err, flush=True)
+    _ffmpeg(["-i", src, "-c:a", "libmp3lame", "-b:a", "192k", "-ar", "44100", dst])
 
 def synth_segment(text, vcfg, speed, out, tries=6):
     """Синтез фрагмента нужным голосом (+обработка). Повторы — сервис иногда троттлит."""
     voice = vcfg["voice"]
     pitch = vcfg.get("pitch", "+0Hz")
     rate = "%+d%%" % (int(speed) + vcfg.get("rate_bias", 0))
-    fx = vcfg.get("fx")
+    af = vcfg.get("af")
     raw = out + ".raw.mp3"
+    last_err = None
     for attempt in range(tries):
         try:
             asyncio.run(_save(text, voice, rate, pitch, raw))
             if os.path.exists(raw) and os.path.getsize(raw) > 0:
-                _finalize(raw, out, fx)
+                _finalize(raw, out, af)
                 return True
-        except Exception:
-            pass
+        except Exception as e:
+            last_err = e
         time.sleep(min(1.5 + attempt, 6))  # нарастающая пауза
+    if last_err:
+        print("[фрагмент не удался]", repr(last_err), flush=True)
     return False
 
 def concat(files, out):
