@@ -1,0 +1,8 @@
+# Автонастройка для Render (бесплатный тариф). Render сам прочитает этот файл.
+services:
+  - type: web
+    name: ozvuchka-knigi
+    runtime: docker
+    plan: free
+    dockerfilePath: ./Dockerfile
+    autoDeploy: true
