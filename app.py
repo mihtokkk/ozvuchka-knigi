@@ -33,7 +33,7 @@ DEFAULT_NARR = "Анна — женский, русский"
 DEFAULT_CHAR = "Дмитрий — мужской, русский"
 
 # Сколько фрагментов озвучивать одновременно и максимальная длина фрагмента.
-CONCURRENCY = int(os.environ.get("TTS_CONCURRENCY", "4"))
+CONCURRENCY = int(os.environ.get("TTS_CONCURRENCY", "8"))
 MAX_CHARS = int(os.environ.get("TTS_MAX_CHARS", "500"))
 
 QUOTE_RE = re.compile(r'[«„"][^»"“]*[»"“]')
@@ -134,45 +134,26 @@ async def _make_segment(sem, idx, text, vcfg, speed, tmpdir, tries=5):
     print("[фрагмент не удался]", idx, flush=True)
     return idx, None
 
-async def _synthesize_all(jobs, speed, tmpdir, progress):
-    """Параллельная озвучка всех фрагментов + добор неудавшихся. Порядок сохраняется."""
-    sem = asyncio.Semaphore(CONCURRENCY)
-    results = [None] * len(jobs)
-    tasks = [asyncio.create_task(_make_segment(sem, i, t, vcfg, speed, tmpdir))
-             for i, (t, vcfg) in enumerate(jobs)]
-    done = 0
-    for coro in asyncio.as_completed(tasks):
-        idx, path = await coro
-        results[idx] = path
-        done += 1
-        try:
-            progress(done / len(jobs), desc="Озвучено %d из %d" % (done, len(jobs)))
-        except Exception:
-            pass
-    # Спасательный проход по неудавшимся — по одному, без гонки (троттлинг мог спасть).
-    failed = [i for i, p in enumerate(results) if p is None]
-    if failed:
-        sem1 = asyncio.Semaphore(1)
-        for i in failed:
-            idx, path = await _make_segment(sem1, i, jobs[i][0], jobs[i][1], speed, tmpdir, tries=4)
-            results[idx] = path
-    return results
-
-def concat(files, out):
-    """Склейка фрагментов в один mp3 одним потоковым проходом (экономно по памяти)."""
+def concat(files, out, fast=False):
+    """Склейка фрагментов в один mp3 одним потоковым проходом (экономно по памяти).
+    fast=True — без перекодирования (-c copy), мгновенно, для промежуточных версий."""
     if len(files) == 1:
         return files[0]
     listfile = out + ".txt"
     with open(listfile, "w", encoding="utf-8") as f:
         for fp in files:
             f.write("file '%s'\n" % os.path.abspath(fp))
-    subprocess.run(["ffmpeg", "-y", "-f", "concat", "-safe", "0", "-i", listfile,
-                    "-c:a", "libmp3lame", "-b:a", "96k", "-ar", "24000", out],
-                   check=True, capture_output=True)
+    if fast:
+        cmd = ["ffmpeg", "-y", "-f", "concat", "-safe", "0", "-i", listfile, "-c", "copy", out]
+    else:
+        cmd = ["ffmpeg", "-y", "-f", "concat", "-safe", "0", "-i", listfile,
+               "-c:a", "libmp3lame", "-b:a", "96k", "-ar", "24000", out]
+    subprocess.run(cmd, check=True, capture_output=True)
     return out
 
-def generate(text, uploaded_file, dialogue_mode, narrator_label, character_label, speed,
-             progress=gr.Progress()):
+async def generate(text, uploaded_file, dialogue_mode, narrator_label, character_label, speed):
+    """Асинхронный генератор: отдаёт растущий файл по мере готовности (прогрессивное
+    прослушивание), в конце — полную озвучку. Порядок фрагментов сохраняется."""
     if uploaded_file:
         with open(uploaded_file, encoding="utf-8", errors="ignore") as f:
             text = f.read()
@@ -192,18 +173,49 @@ def generate(text, uploaded_file, dialogue_mode, narrator_label, character_label
         raise gr.Error("Не из чего делать озвучку.")
 
     tmpdir = tempfile.mkdtemp(prefix="book_")
-    results = asyncio.run(_synthesize_all(jobs, speed, tmpdir, progress))
+    n = len(jobs)
+    results = [None] * n
+    sem = asyncio.Semaphore(CONCURRENCY)
+    tasks = [asyncio.create_task(_make_segment(sem, i, t, vcfg, speed, tmpdir))
+             for i, (t, vcfg) in enumerate(jobs)]
 
-    files = [p for p in results if p]             # уже в исходном порядке
-    failed = len(results) - len(files)
+    out = os.path.join(tmpdir, "audiobook.mp3")
+    emitted = 0   # сколько префиксных фрагментов уже отдано пользователю
+    done = 0
+    # Параллельно озвучиваем; как только непрерывный префикс с начала подрос — отдаём его,
+    # чтобы можно было слушать начало, пока остальное догружается.
+    for coro in asyncio.as_completed(tasks):
+        idx, path = await coro
+        results[idx] = path
+        done += 1
+        ready = emitted
+        while ready < n and results[ready] is not None:
+            ready += 1
+        if ready < n and ready > emitted and (emitted == 0 or ready - emitted >= 8):
+            emitted = ready
+            part_files = [results[i] for i in range(ready) if results[i]]
+            if part_files:
+                try:
+                    part = await asyncio.to_thread(concat, part_files, out + ".part.mp3", True)
+                    yield part, "▶ Можно слушать начало. Озвучено %d из %d, остальное догружается…" % (done, n)
+                except Exception:
+                    pass
+
+    # Добор упавших фрагментов (по одному — троттлинг мог спасть).
+    sem1 = asyncio.Semaphore(1)
+    for i in [k for k, p in enumerate(results) if p is None]:
+        _, path = await _make_segment(sem1, i, jobs[i][0], jobs[i][1], speed, tmpdir, tries=4)
+        results[i] = path
+
+    files = [p for p in results if p]             # в исходном порядке
     if not files:
         raise gr.Error("Сервис голосов сейчас перегружен — попробуйте ещё раз через минуту.")
-
-    final = concat(files, os.path.join(tmpdir, "audiobook.mp3"))
-    note = "✅ Готово: озвучено фрагментов — %d." % len(files)
+    final = await asyncio.to_thread(concat, files, out)
+    failed = n - len(files)
+    note = "✅ Готово полностью: фрагментов — %d." % len(files)
     if failed:
         note += " ⚠️ Не удалось — %d (нажмите «Озвучить» ещё раз)." % failed
-    return final, note
+    yield final, note
 
 with gr.Blocks(title="Озвучка книги") as demo:
     gr.Markdown(
