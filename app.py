@@ -1,17 +1,16 @@
 # -*- coding: utf-8 -*-
 """
-Озвучка книги — живые нейросетевые голоса (бесплатно, через edge-tts).
-Голоса: Анна, Дмитрий (чистые нейроголоса) и Вера (тёплый обработанный голос).
-Генерация фрагментов — ПАРАЛЛЕЛЬНАЯ (несколько запросов к edge-tts одновременно),
-с сохранением исходного порядка и добором неудавшихся фрагментов.
+Озвучка книги голосом «Вера» (бесплатно, через edge-tts).
+Генерация параллельная + прогрессивная выдача: начало можно слушать, пока
+остальное догружается. Один голос — Вера (тёплый обработанный).
 """
 import os, re, asyncio, tempfile, subprocess
 import edge_tts
 import gradio as gr
 
-# --- Обработка голоса «Вера» (ffmpeg, -af): ТОЛЬКО естественные фильтры — тепло снизу,
-#     немного «тела», мягкая компрессия (слышнее дыхание), де-эссер против шипения,
-#     короткие паузы, ровная громкость. Без эксайтера/сатурации (они давали «металл»). ---
+# --- Обработка голоса «Вера» (ffmpeg, -af): тепло снизу, немного «тела», мягкая
+#     компрессия (слышнее дыхание), де-эссер против шипения, короткие паузы, ровная
+#     громкость. Только естественные фильтры — без эксайтера/сатурации («металл»). ---
 VERA_AF = (
     "highpass=f=70,"
     "bass=g=2.5:f=170,"
@@ -21,40 +20,15 @@ VERA_AF = (
     "silenceremove=stop_periods=-1:stop_duration=0.16:stop_threshold=-42dB:stop_silence=0.07,"
     "loudnorm=I=-16:TP=-1.5:LRA=11"
 )
+# Голос Вера = Светлана с небольшим сдвигом высоты/темпа + обработка.
+VERA = {"voice": "ru-RU-SvetlanaNeural", "pitch": "+5Hz", "rate_bias": -2, "af": VERA_AF}
 
-# Каждый голос: базовый нейроголос + опц. сдвиг высоты/темпа + опц. обработка af.
-VOICES = {
-    "Анна — женский, русский":      {"voice": "ru-RU-SvetlanaNeural"},
-    "Дмитрий — мужской, русский":   {"voice": "ru-RU-DmitryNeural"},
-    "Вера — тёплый, обработанный":  {"voice": "ru-RU-SvetlanaNeural",
-                                     "pitch": "+5Hz", "rate_bias": -2, "af": VERA_AF},
-}
-DEFAULT_NARR = "Анна — женский, русский"
-DEFAULT_CHAR = "Дмитрий — мужской, русский"
-
-# Сколько фрагментов озвучивать одновременно и максимальная длина фрагмента.
+# Параллельные запросы; размер крупного фрагмента; размер маленького первого (быстрый старт).
 CONCURRENCY = int(os.environ.get("TTS_CONCURRENCY", "8"))
-MAX_CHARS = int(os.environ.get("TTS_MAX_CHARS", "500"))
+MAX_CHARS = int(os.environ.get("TTS_MAX_CHARS", "1500"))
+FIRST_CHARS = int(os.environ.get("TTS_FIRST_CHARS", "160"))
 
-QUOTE_RE = re.compile(r'[«„"][^»"“]*[»"“]')
 SENT_RE = re.compile(r'[^.!?…]+[.!?…]+|\S[^.!?…]*$')
-
-def split_segments(text, dialogue_mode):
-    """Делит текст на (фрагмент, роль): 'narr' — рассказчик, 'dlg' — реплика в кавычках."""
-    text = text.strip()
-    if not dialogue_mode:
-        return [(text, "narr")] if text else []
-    parts, last = [], 0
-    for m in QUOTE_RE.finditer(text):
-        if m.start() > last:
-            s = text[last:m.start()].strip()
-            if s: parts.append((s, "narr"))
-        d = m.group().strip()
-        if d: parts.append((d, "dlg"))
-        last = m.end()
-    tail = text[last:].strip()
-    if tail: parts.append((tail, "narr"))
-    return parts or ([(text, "narr")] if text else [])
 
 def _hard_split(s, n):
     """Режет слишком длинное предложение по словам, не длиннее n символов."""
@@ -67,30 +41,37 @@ def _hard_split(s, n):
     if cur: parts.append(cur)
     return parts or [s]
 
-def chunk(text, role, max_chars=MAX_CHARS):
-    """Бьёт кусок на фрагменты по границам предложений, не длиннее max_chars (роль сохраняется)."""
+def split_blocks(text):
+    """Весь текст → крупные блоки по границам абзацев и предложений (реплики читаются
+    Верой как есть). Первый блок — маленький, чтобы быстрее зазвучало начало."""
     text = text.strip()
     if not text:
         return []
-    sentences = SENT_RE.findall(text) or [text]
-    pieces = []
-    for s in sentences:
-        s = s.strip()
-        if not s:
+    units = []
+    for para in re.split(r'\n\s*\n', text):
+        para = para.strip()
+        if not para:
             continue
-        pieces.extend(_hard_split(s, max_chars) if len(s) > max_chars else [s])
-    chunks, cur = [], ""
-    for p in pieces:
-        if cur and len(cur) + len(p) + 1 > max_chars:
-            chunks.append(cur); cur = p
+        for s in (SENT_RE.findall(para) or [para]):
+            s = s.strip()
+            if not s:
+                continue
+            units.extend(_hard_split(s, MAX_CHARS) if len(s) > MAX_CHARS else [s])
+    # Гарантируем маленький ПЕРВЫЙ блок (даже если первое предложение длинное) —
+    # чтобы начало зазвучало как можно быстрее.
+    if units and len(units[0]) > FIRST_CHARS:
+        units = _hard_split(units[0], FIRST_CHARS) + units[1:]
+    blocks, cur, limit = [], "", FIRST_CHARS
+    for u in units:
+        if cur and len(cur) + len(u) + 1 > limit:
+            blocks.append(cur); cur = u; limit = MAX_CHARS   # после первого — полный лимит
         else:
-            cur = (cur + " " + p).strip()
+            cur = (cur + " " + u).strip()
     if cur:
-        chunks.append(cur)
-    return [(c, role) for c in chunks]
+        blocks.append(cur)
+    return blocks
 
 def clean(t):
-    t = t.replace("«", "").replace("»", "").replace("„", "").replace("“", "").replace('"', "")
     return re.sub(r"\s+", " ", t).strip()
 
 # -------- Синтез (асинхронный, параллельный) --------
@@ -99,8 +80,7 @@ async def _edge_save(text, voice, rate, pitch, out):
     await edge_tts.Communicate(text, voice, rate=rate, pitch=pitch).save(out)
 
 def _vera_process(src, dst, af):
-    """Обработка «Веры» через ffmpeg (блокирующая, запускается в отдельном потоке).
-    Если обработка упала — возвращаем исходный звук, чтобы голос всё равно звучал."""
+    """Обработка «Веры» через ffmpeg (в отдельном потоке). Если упала — отдаём исходный звук."""
     try:
         subprocess.run(["ffmpeg", "-y", "-i", src, "-af", af,
                         "-c:a", "libmp3lame", "-b:a", "96k", "-ar", "24000", dst],
@@ -109,25 +89,27 @@ def _vera_process(src, dst, af):
     except subprocess.CalledProcessError as e:
         print("[Вера] обработка не прошла, выдаю без неё:",
               (e.stderr or b"").decode("utf-8", "ignore")[-400:], flush=True)
-        return src
+        # Привести к единому формату (96к/24кГц) без фильтра — чтобы финальная склейка
+        # прошла без перекодирования (-c copy).
+        try:
+            subprocess.run(["ffmpeg", "-y", "-i", src,
+                            "-c:a", "libmp3lame", "-b:a", "96k", "-ar", "24000", dst],
+                           check=True, capture_output=True)
+            return dst
+        except Exception:
+            return src
 
-async def _make_segment(sem, idx, text, vcfg, speed, tmpdir, tries=5):
-    """Озвучивает один фрагмент с повторами. Возвращает (idx, путь-к-файлу | None)."""
-    voice = vcfg["voice"]
-    pitch = vcfg.get("pitch", "+0Hz")
-    rate = "%+d%%" % (int(speed) + vcfg.get("rate_bias", 0))
-    af = vcfg.get("af")
+async def _make_segment(sem, idx, text, speed, tmpdir, tries=5):
+    """Озвучивает один блок Верой (синтез + обработка) с повторами. → (idx, путь | None)."""
+    rate = "%+d%%" % (int(speed) + VERA["rate_bias"])
     raw = os.path.join(tmpdir, "seg%04d.mp3" % idx)
     for attempt in range(tries):
         try:
-            async with sem:                       # ограничиваем одновременные запросы
-                await _edge_save(clean(text), voice, rate, pitch, raw)
+            async with sem:
+                await _edge_save(clean(text), VERA["voice"], rate, VERA["pitch"], raw)
             if os.path.exists(raw) and os.path.getsize(raw) > 0:
-                if af:                            # «Вера» — обработка в отдельном потоке
-                    dst = os.path.join(tmpdir, "seg%04d_v.mp3" % idx)
-                    path = await asyncio.to_thread(_vera_process, raw, dst, af)
-                    return idx, path
-                return idx, raw                   # обычные голоса — без ffmpeg (быстро)
+                dst = os.path.join(tmpdir, "seg%04d_v.mp3" % idx)
+                return idx, await asyncio.to_thread(_vera_process, raw, dst, VERA["af"])
         except Exception:
             pass
         await asyncio.sleep(min(1.0 + attempt, 5))
@@ -151,8 +133,8 @@ def concat(files, out, fast=False):
     subprocess.run(cmd, check=True, capture_output=True)
     return out
 
-async def generate(text, uploaded_file, dialogue_mode, narrator_label, character_label, speed):
-    """Асинхронный генератор: отдаёт растущий файл по мере готовности (прогрессивное
+async def generate(text, uploaded_file, speed):
+    """Async-генератор: отдаёт растущий файл по мере готовности (прогрессивное
     прослушивание), в конце — полную озвучку. Порядок фрагментов сохраняется."""
     if uploaded_file:
         with open(uploaded_file, encoding="utf-8", errors="ignore") as f:
@@ -161,29 +143,19 @@ async def generate(text, uploaded_file, dialogue_mode, narrator_label, character
     if not text:
         raise gr.Error("Вставьте текст или загрузите .txt файл.")
 
-    narr_cfg = VOICES[narrator_label]
-    char_cfg = VOICES[character_label]
-
-    # Текст → фрагменты (рассказчик/реплики) → дробление по предложениям → задания с голосом.
-    jobs = []
-    for seg_text, role in split_segments(text, dialogue_mode):
-        for piece, r in chunk(seg_text, role):
-            jobs.append((piece, char_cfg if r == "dlg" else narr_cfg))
-    if not jobs:
+    blocks = split_blocks(text)
+    if not blocks:
         raise gr.Error("Не из чего делать озвучку.")
 
     tmpdir = tempfile.mkdtemp(prefix="book_")
-    n = len(jobs)
+    n = len(blocks)
     results = [None] * n
     sem = asyncio.Semaphore(CONCURRENCY)
-    tasks = [asyncio.create_task(_make_segment(sem, i, t, vcfg, speed, tmpdir))
-             for i, (t, vcfg) in enumerate(jobs)]
+    tasks = [asyncio.create_task(_make_segment(sem, i, blocks[i], speed, tmpdir))
+             for i in range(n)]
 
     out = os.path.join(tmpdir, "audiobook.mp3")
-    emitted = 0   # сколько префиксных фрагментов уже отдано пользователю
-    done = 0
-    # Параллельно озвучиваем; как только непрерывный префикс с начала подрос — отдаём его,
-    # чтобы можно было слушать начало, пока остальное догружается.
+    emitted, done = 0, 0
     for coro in asyncio.as_completed(tasks):
         idx, path = await coro
         results[idx] = path
@@ -191,7 +163,8 @@ async def generate(text, uploaded_file, dialogue_mode, narrator_label, character
         ready = emitted
         while ready < n and results[ready] is not None:
             ready += 1
-        if ready < n and ready > emitted and (emitted == 0 or ready - emitted >= 8):
+        # Отдаём начало сразу (первый готовый блок), дальше — по мере роста префикса.
+        if ready < n and ready > emitted and (emitted == 0 or ready - emitted >= 3):
             emitted = ready
             part_files = [results[i] for i in range(ready) if results[i]]
             if part_files:
@@ -204,13 +177,16 @@ async def generate(text, uploaded_file, dialogue_mode, narrator_label, character
     # Добор упавших фрагментов (по одному — троттлинг мог спасть).
     sem1 = asyncio.Semaphore(1)
     for i in [k for k, p in enumerate(results) if p is None]:
-        _, path = await _make_segment(sem1, i, jobs[i][0], jobs[i][1], speed, tmpdir, tries=4)
+        _, path = await _make_segment(sem1, i, blocks[i], speed, tmpdir, tries=4)
         results[i] = path
 
-    files = [p for p in results if p]             # в исходном порядке
+    files = [p for p in results if p]
     if not files:
         raise gr.Error("Сервис голосов сейчас перегружен — попробуйте ещё раз через минуту.")
-    final = await asyncio.to_thread(concat, files, out)
+    try:                                     # быстрая склейка без перекодирования (все фрагменты 96к/24кГц)
+        final = await asyncio.to_thread(concat, files, out, True)
+    except Exception:                        # страховка, если копия всё же не прошла
+        final = await asyncio.to_thread(concat, files, out, False)
     failed = n - len(files)
     note = "✅ Готово полностью: фрагментов — %d." % len(files)
     if failed:
@@ -219,36 +195,29 @@ async def generate(text, uploaded_file, dialogue_mode, narrator_label, character
 
 with gr.Blocks(title="Озвучка книги") as demo:
     gr.Markdown(
-        "# 🎧 Озвучка книги\n"
-        "Живые нейросетевые голоса (бесплатно). Вставь текст или загрузи **.txt** — "
-        "получишь аудио, которое можно слушать и скачать. Реплики в кавычках «…» читаются "
-        "отдельным голосом.\n\n"
-        "Голоса: **Анна** и **Дмитрий** — чистые нейроголоса; **Вера** — тёплый обработанный голос."
+        "# 🎧 Озвучка книги — голос «Вера»\n"
+        "Вставь текст или загрузи **.txt** — получишь аудиокнигу голосом Веры, которую "
+        "можно слушать и скачать. Для больших книг начало можно слушать, пока остальное догружается."
     )
     with gr.Row():
         with gr.Column(scale=3):
             text = gr.Textbox(
                 label="Текст книги", lines=12,
-                placeholder="Жил-был на свете человек. «Кто здесь?» — тихо спросил он. И никто не ответил…",
+                placeholder="Вставь сюда текст книги…",
             )
             file = gr.File(label="…или загрузи .txt", file_types=[".txt"], type="filepath")
-            dialogue = gr.Checkbox(label="Реплики в кавычках — отдельным голосом", value=True)
-            with gr.Row():
-                narrator = gr.Dropdown(list(VOICES), value=DEFAULT_NARR, label="📖 Голос рассказчика")
-                character = gr.Dropdown(list(VOICES), value=DEFAULT_CHAR, label="💬 Голос персонажа")
             speed = gr.Slider(-50, 100, value=0, step=5,
                               label="Скорость речи, %  (− медленнее · + быстрее)")
             btn = gr.Button("▶ Озвучить", variant="primary", size="lg")
         with gr.Column(scale=2):
-            audio = gr.Audio(label="Результат — слушай и скачивай", type="filepath")
+            audio = gr.Audio(label="Аудиокнига — слушай и скачивай", type="filepath")
             status = gr.Markdown()
-    btn.click(generate, [text, file, dialogue, narrator, character, speed], [audio, status])
+    btn.click(generate, [text, file, speed], [audio, status])
     gr.Markdown(
-        "<sub>Голоса Microsoft Neural через edge-tts. Фрагменты озвучиваются параллельно. "
-        "Если фрагмент не удался — просто нажми «Озвучить» ещё раз.</sub>"
+        "<sub>Голос Вера (Microsoft Neural через edge-tts, обработка ffmpeg). Фрагменты "
+        "озвучиваются параллельно. Если фрагмент не удался — нажми «Озвучить» ещё раз.</sub>"
     )
 
 if __name__ == "__main__":
-    # На хостинге (Render и т.п.) порт задаётся переменной PORT; локально — 7860.
     port = int(os.environ.get("PORT", 7860))
     demo.launch(server_name="0.0.0.0", server_port=port)
