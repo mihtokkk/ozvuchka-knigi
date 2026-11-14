@@ -1,6 +1,6 @@
 # -*- coding: utf-8 -*-
 """
-Озвучка книги голосом «Вера» (бесплатно, через edge-tts).
+Аудиотекст — озвучка текста голосом «Вера» (бесплатно, через edge-tts).
 Генерация параллельная + прогрессивная выдача: начало можно слушать, пока
 остальное догружается. Один голос — Вера (тёплый обработанный).
 """
@@ -193,30 +193,40 @@ async def generate(text, uploaded_file, speed):
         note += " ⚠️ Не удалось — %d (нажмите «Озвучить» ещё раз)." % failed
     yield final, note
 
-with gr.Blocks(title="Озвучка книги") as demo:
-    gr.Markdown(
-        "# 🎧 Озвучка книги — голос «Вера»\n"
-        "Вставь текст или загрузи **.txt** — получишь аудиокнигу голосом Веры, которую "
-        "можно слушать и скачать. Для больших книг начало можно слушать, пока остальное догружается."
-    )
+# Оформление в фирменных цветах листа Summary (бирюза/лаванда/мята/персик).
+CSS = """
+.gradio-container { background: linear-gradient(180deg,#eef0fb 0%, #e8f2ec 100%) !important; }
+.gradio-container .main { max-width: 1080px; margin: 0 auto; }
+#app-banner {
+  background: linear-gradient(120deg,#072E3D 0%, #0F5A74 55%, #137395 100%);
+  color:#ffffff; border-radius:18px; padding:24px 30px; margin-bottom:18px;
+  box-shadow:0 10px 26px rgba(7,46,61,.22);
+}
+#app-banner h1 { margin:0; font-size:32px; font-weight:800; letter-spacing:.5px; color:#ffffff; }
+#app-banner p  { margin:6px 0 0; font-size:13px; color:#D8D9F5; letter-spacing:3px; text-transform:uppercase; }
+#go-btn button {
+  background:#006568 !important; background-image:none !important; border:none !important;
+  color:#ffffff !important; font-weight:700 !important; border-radius:12px !important;
+  box-shadow:0 5px 14px rgba(0,101,104,.30) !important;
+}
+#go-btn button:hover { filter:brightness(1.09); }
+.block { border-radius:14px !important; }
+textarea:focus, input:focus { border-color:#006568 !important; box-shadow:0 0 0 2px #D8D9F5 !important; }
+footer { display:none !important; }
+"""
+with gr.Blocks(title="Аудиотекст", css=CSS) as demo:
+    gr.HTML('<div id="app-banner"><h1>🎧 Аудиотекст</h1><p>текст в голос</p></div>')
     with gr.Row():
         with gr.Column(scale=3):
-            text = gr.Textbox(
-                label="Текст книги", lines=12,
-                placeholder="Вставь сюда текст книги…",
-            )
+            text = gr.Textbox(label="Текст", lines=12, placeholder="Вставь сюда текст…")
             file = gr.File(label="…или загрузи .txt", file_types=[".txt"], type="filepath")
             speed = gr.Slider(-50, 100, value=0, step=5,
                               label="Скорость речи, %  (− медленнее · + быстрее)")
-            btn = gr.Button("▶ Озвучить", variant="primary", size="lg")
+            btn = gr.Button("▶ Озвучить", variant="primary", size="lg", elem_id="go-btn")
         with gr.Column(scale=2):
-            audio = gr.Audio(label="Аудиокнига — слушай и скачивай", type="filepath")
+            audio = gr.Audio(label="Аудио — слушать и скачать", type="filepath")
             status = gr.Markdown()
     btn.click(generate, [text, file, speed], [audio, status])
-    gr.Markdown(
-        "<sub>Голос Вера (Microsoft Neural через edge-tts, обработка ffmpeg). Фрагменты "
-        "озвучиваются параллельно. Если фрагмент не удался — нажми «Озвучить» ещё раз.</sub>"
-    )
 
 if __name__ == "__main__":
     port = int(os.environ.get("PORT", 7860))
