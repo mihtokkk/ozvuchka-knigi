@@ -193,40 +193,68 @@ async def generate(text, uploaded_file, speed):
         note += " ⚠️ Не удалось — %d (нажмите «Озвучить» ещё раз)." % failed
     yield final, note
 
-# Оформление в фирменных цветах листа Summary (бирюза/лаванда/мята/персик).
+# Оформление «Парижский салон»: тёплый айвори, пыльная роза, антикварное золото,
+# петербургская синь нотой; заголовок Playfair Display курсивом, золотая рамка-гравюра.
 CSS = """
-.gradio-container { background: linear-gradient(180deg,#eef0fb 0%, #e8f2ec 100%) !important; }
-.gradio-container .main { max-width: 1080px; margin: 0 auto; }
-#app-banner {
-  background: linear-gradient(120deg,#072E3D 0%, #0F5A74 55%, #137395 100%);
-  color:#ffffff; border-radius:18px; padding:24px 30px; margin-bottom:18px;
-  box-shadow:0 10px 26px rgba(7,46,61,.22);
+@import url('https://fonts.googleapis.com/css2?family=Playfair+Display:ital,wght@0,600;1,500;1,600;1,700&family=Lora:wght@400;500&display=swap');
+.gradio-container { background:#F1EADB !important; font-family:'Lora',Georgia,serif !important; color:#322D28; }
+.gradio-container .main { max-width:980px; margin:0 auto; }
+/* рамка-гравюра вокруг всего */
+#salon {
+  background:#FBF8F2; border:1px solid #B4925A; border-radius:4px;
+  padding:26px 32px 30px; margin:16px 0 26px;
+  box-shadow:0 0 0 4px #FBF8F2, 0 0 0 5px rgba(180,146,90,.75), 0 18px 46px rgba(50,45,40,.12);
 }
-#app-banner h1 { margin:0; font-size:32px; font-weight:800; letter-spacing:.5px; color:#ffffff; }
-#app-banner p  { margin:6px 0 0; font-size:13px; color:#D8D9F5; letter-spacing:3px; text-transform:uppercase; }
+/* баннер-заголовок */
+#app-banner { text-align:center; margin-bottom:12px; }
+#app-banner .title {
+  font-family:'Playfair Display',serif; font-style:italic; font-weight:600;
+  font-size:48px; line-height:1.05; color:#322D28; margin:0; letter-spacing:.5px;
+}
+#app-banner .rule { width:120px; height:1px; background:#B4925A; margin:12px auto 8px; }
+#app-banner .tag {
+  font-family:'Playfair Display',serif; font-style:italic; font-size:15px;
+  color:#8A6D4B; letter-spacing:5px; margin:0;
+}
+#app-banner .fleuron { color:#B4925A; font-size:20px; margin-top:2px; }
+/* поля */
+label span { font-family:'Lora',serif !important; color:#4A4038 !important; }
+textarea, input[type=text] {
+  background:#FBF9F4 !important; border:1px solid #D9C9A8 !important; border-radius:3px !important;
+  color:#322D28 !important; font-family:'Lora',serif !important;
+}
+textarea:focus, input:focus { border-color:#28364B !important; box-shadow:0 0 0 2px rgba(40,54,75,.18) !important; }
+/* кнопка — нежная пыльная роза, курсивная подпись, золотая обводка */
 #go-btn button {
-  background:#006568 !important; background-image:none !important; border:none !important;
-  color:#ffffff !important; font-weight:700 !important; border-radius:12px !important;
-  box-shadow:0 5px 14px rgba(0,101,104,.30) !important;
+  background:#E9CAD0 !important; background-image:none !important; border:1px solid #B4925A !important;
+  color:#6E2E3C !important; font-family:'Playfair Display',serif !important; font-style:italic !important;
+  font-weight:600 !important; font-size:20px !important; letter-spacing:.5px !important;
+  border-radius:4px !important; box-shadow:0 4px 14px rgba(110,46,60,.14) !important;
 }
-#go-btn button:hover { filter:brightness(1.09); }
-.block { border-radius:14px !important; }
-textarea:focus, input:focus { border-color:#006568 !important; box-shadow:0 0 0 2px #D8D9F5 !important; }
+#go-btn button:hover { background:#EDD3D8 !important; filter:none; }
 footer { display:none !important; }
 """
 with gr.Blocks(title="Аудиотекст", css=CSS) as demo:
-    gr.HTML('<div id="app-banner"><h1>🎧 Аудиотекст</h1><p>текст в голос</p></div>')
-    with gr.Row():
-        with gr.Column(scale=3):
-            text = gr.Textbox(label="Текст", lines=12, placeholder="Вставь сюда текст…")
-            file = gr.File(label="…или загрузи .txt", file_types=[".txt"], type="filepath")
-            speed = gr.Slider(-50, 100, value=0, step=5,
-                              label="Скорость речи, %  (− медленнее · + быстрее)")
-            btn = gr.Button("▶ Озвучить", variant="primary", size="lg", elem_id="go-btn")
-        with gr.Column(scale=2):
-            audio = gr.Audio(label="Аудио — слушать и скачать", type="filepath")
-            status = gr.Markdown()
-    btn.click(generate, [text, file, speed], [audio, status])
+    with gr.Column(elem_id="salon"):
+        gr.HTML(
+            '<div id="app-banner">'
+            '<p class="title">Аудиотекст</p>'
+            '<div class="rule"></div>'
+            '<p class="tag">TEXTE · VOIX</p>'
+            '<div class="fleuron">&#10087;</div>'
+            '</div>'
+        )
+        with gr.Row():
+            with gr.Column(scale=3):
+                text = gr.Textbox(label="Текст", lines=12, placeholder="Вставь сюда текст…")
+                file = gr.File(label="…или загрузи .txt", file_types=[".txt"], type="filepath")
+                speed = gr.Slider(-50, 100, value=0, step=5,
+                                  label="Скорость речи, %  (− медленнее · + быстрее)")
+                btn = gr.Button("Озвучить", variant="primary", size="lg", elem_id="go-btn")
+            with gr.Column(scale=2):
+                audio = gr.Audio(label="Аудио — слушать и скачать", type="filepath")
+                status = gr.Markdown()
+        btn.click(generate, [text, file, speed], [audio, status])
 
 if __name__ == "__main__":
     port = int(os.environ.get("PORT", 7860))
