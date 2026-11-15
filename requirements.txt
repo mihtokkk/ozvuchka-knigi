@@ -1,2 +1,4 @@
 gradio
 edge-tts
+pytesseract
+pillow

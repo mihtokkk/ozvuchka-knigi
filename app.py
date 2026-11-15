@@ -7,6 +7,11 @@
 import os, re, asyncio, tempfile, subprocess
 import edge_tts
 import gradio as gr
+from PIL import Image, ImageOps
+try:
+    import pytesseract  # распознавание текста с фото (OCR), требует tesseract-ocr
+except Exception:
+    pytesseract = None
 
 # --- Обработка голоса «Вера» (ffmpeg, -af): тепло снизу, немного «тела», мягкая
 #     компрессия (слышнее дыхание), де-эссер против шипения, короткие паузы, ровная
@@ -74,6 +79,14 @@ def split_blocks(text):
 def clean(t):
     return re.sub(r"\s+", " ", t).strip()
 
+IMG_EXT = (".jpg", ".jpeg", ".png", ".webp", ".bmp", ".tif", ".tiff")
+
+def ocr_image(path):
+    """Распознаёт текст с изображения (Tesseract, рус+англ). Фото с телефона
+    поворачивается по EXIF, переводится в оттенки серого для чистоты."""
+    img = ImageOps.exif_transpose(Image.open(path)).convert("L")
+    return pytesseract.image_to_string(img, lang="rus+eng")
+
 # -------- Синтез (асинхронный, параллельный) --------
 
 async def _edge_save(text, voice, rate, pitch, out):
@@ -136,12 +149,29 @@ def concat(files, out, fast=False):
 async def generate(text, uploaded_file, speed):
     """Async-генератор: отдаёт растущий файл по мере готовности (прогрессивное
     прослушивание), в конце — полную озвучку. Порядок фрагментов сохраняется."""
-    if uploaded_file:
-        with open(uploaded_file, encoding="utf-8", errors="ignore") as f:
-            text = f.read()
+    # Собираем текст из загруженных файлов: .txt читаем, с фото распознаём (OCR).
+    files = uploaded_file if isinstance(uploaded_file, list) else ([uploaded_file] if uploaded_file else [])
+    if files:
+        parts, n = [], len(files)
+        for i, fp in enumerate(files):
+            ext = os.path.splitext(fp)[1].lower()
+            if ext == ".txt":
+                try:
+                    parts.append(open(fp, encoding="utf-8", errors="ignore").read())
+                except Exception:
+                    pass
+            elif ext in IMG_EXT and pytesseract is not None:
+                yield None, "🔎 Распознаю текст с изображений… %d из %d" % (i + 1, n)
+                try:
+                    parts.append(await asyncio.to_thread(ocr_image, fp))
+                except Exception as e:
+                    print("[OCR] не удалось:", fp, e, flush=True)
+        joined = "\n\n".join(p.strip() for p in parts if p and p.strip())
+        if joined:
+            text = joined
     text = (text or "").strip()
     if not text:
-        raise gr.Error("Вставьте текст или загрузите .txt файл.")
+        raise gr.Error("Вставьте текст, загрузите .txt или фото с текстом.")
 
     blocks = split_blocks(text)
     if not blocks:
@@ -230,7 +260,7 @@ textarea:focus, input:focus { border-color:#28364B !important; box-shadow:0 0 0 
 }
 #go-btn:hover, #go-btn button:hover { filter:brightness(1.08); }
 /* файловая зона — короче, чтобы не прокручивать до кнопки */
-#file-up { max-height:118px !important; overflow:hidden !important; }
+#file-up { max-height:170px !important; overflow:auto !important; }
 #file-up .wrap { min-height:70px !important; }
 footer { display:none !important; }
 """
@@ -246,7 +276,10 @@ with gr.Blocks(title="Аудиотекст", css=CSS) as demo:
         with gr.Row():
             with gr.Column(scale=3):
                 text = gr.Textbox(label="Текст", lines=12, placeholder="Вставь сюда текст…")
-                file = gr.File(label="…или загрузи .txt", file_types=[".txt"], type="filepath", elem_id="file-up")
+                file = gr.File(label="…или загрузи .txt / фото с текстом (можно много)",
+                               file_count="multiple",
+                               file_types=[".txt", ".jpg", ".jpeg", ".png", ".webp", ".bmp", ".tiff"],
+                               type="filepath", elem_id="file-up")
                 speed = gr.Slider(-50, 100, value=0, step=5,
                                   label="Скорость речи, %  (− медленнее · + быстрее)")
                 btn = gr.Button("Озвучить", variant="primary", size="lg", elem_id="go-btn")

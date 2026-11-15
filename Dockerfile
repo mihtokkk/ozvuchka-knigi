@@ -2,9 +2,9 @@
 # (Render, Fly.io, Koyeb, Google Cloud Run, Oracle Always Free и др.)
 FROM python:3.11-slim
 
-# ffmpeg нужен для обработки голоса «Вера» и склейки аудио
+# ffmpeg — обработка голоса/склейка; tesseract — распознавание текста с фото (рус+англ)
 RUN apt-get update \
- && apt-get install -y --no-install-recommends ffmpeg \
+ && apt-get install -y --no-install-recommends ffmpeg tesseract-ocr tesseract-ocr-rus \
  && rm -rf /var/lib/apt/lists/*
 
 WORKDIR /app
