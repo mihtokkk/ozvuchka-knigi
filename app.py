@@ -329,6 +329,7 @@ TITLE_JS = """() => {
     document.querySelector('#paste-btn button').title='Вставить из буфера обмена';
     document.querySelector('#clear-btn button').title='Очистить весь текст';
   } catch(e){}
+  // ---- вертикальное центрирование карточки ----
   const apply = () => { try {
     const gc = document.querySelector('.gradio-container');
     const salon = document.querySelector('#salon');
@@ -342,8 +343,32 @@ TITLE_JS = """() => {
     }
   } catch(e){} };
   apply(); setTimeout(apply, 500); window.addEventListener('resize', apply);
+  // ---- благородный вход: «штора» уходит + элементы всплывают ----
+  try {
+    const ov = document.createElement('div');
+    ov.style.cssText = 'position:fixed;inset:0;background:#15110e;z-index:9999;pointer-events:none;opacity:1;transition:opacity .9s ease';
+    document.body.appendChild(ov);
+    requestAnimationFrame(() => { ov.style.opacity = '0'; });
+    setTimeout(() => ov.remove(), 1100);
+  } catch(e){}
+  let tries = 0;
+  const entrance = () => {
+    const salon = document.querySelector('#salon');
+    if (!salon || salon.dataset.entered) return;
+    if (!window.gsap) { if (tries++ < 12) setTimeout(entrance, 180); return; }
+    salon.dataset.entered = '1';
+    const tl = gsap.timeline({ defaults: { ease: 'power2.out' } });
+    tl.from('#salon', { opacity:0, y:24, duration:.75 })
+      .from('#app-banner .title', { opacity:0, y:16, duration:.6 }, '-=.4')
+      .from('#app-banner .rule', { scaleX:0, transformOrigin:'center', duration:.5 }, '-=.3')
+      .from('#app-banner .fleuron', { opacity:0, y:-4, duration:.4 }, '-=.15')
+      .from('#salon .block', { opacity:0, y:14, duration:.5, stagger:.05 }, '-=.3');
+  };
+  entrance();
 }"""
-with gr.Blocks(title="Аудиотекст", css=CSS) as demo:
+
+HEAD = '<script src="https://cdnjs.cloudflare.com/ajax/libs/gsap/3.12.5/gsap.min.js"></script>'
+with gr.Blocks(title="Аудиотекст", css=CSS, head=HEAD) as demo:
     with gr.Column(elem_id="salon"):
         gr.HTML(
             '<div id="app-banner">'
