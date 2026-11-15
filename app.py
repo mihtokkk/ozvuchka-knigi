@@ -263,15 +263,14 @@ CSS = """
   --border-color-primary:#D9C9A8 !important; --block-border-color:#D9C9A8 !important;
   --color-accent:#137395 !important; --slider-color:#137395 !important;
   color:#322D28 !important;
+  min-height:100vh !important; display:flex !important; flex-direction:column !important; justify-content:center !important;
 }
 body { background:#15110e !important; }
-.gradio-container .main { max-width:900px !important; margin:0 auto !important; min-height:100vh !important;
-  box-sizing:border-box !important; display:flex !important; flex-direction:column !important;
-  justify-content:center !important; padding:18px 0 !important; }
+.gradio-container .main { max-width:1200px !important; width:100% !important; margin:0 auto !important; padding:18px 0 !important; }
 /* рамка-гравюра вокруг всего */
 #salon {
   background:#FBFAF7; border:1px solid #B4925A; border-radius:4px;
-  padding:16px 30px 22px; margin:auto 0 !important;
+  padding:16px 30px 22px; margin:0 !important;
   box-shadow:0 0 0 4px #FBFAF7, 0 0 0 5px rgba(180,146,90,.75), 0 18px 44px rgba(10,8,6,.30);
 }
 /* баннер-заголовок */
@@ -292,7 +291,7 @@ textarea:focus, input:focus { border-color:#28364B !important; box-shadow:0 0 0 
 /* кнопка — бирюзовый градиент как на Summary */
 #go-btn, #go-btn button {
   background:linear-gradient(120deg,#8F6908 0%, #CCAC00 55%, #A67D0A 100%) !important;
-  border:none !important; color:#3A2C08 !important;
+  border:none !important; color:#ffffff !important; text-shadow:0 1px 2px rgba(70,52,0,.5) !important;
   font-family:'Playfair Display',serif !important; font-style:normal !important;
   font-weight:700 !important; font-size:20px !important; letter-spacing:.5px !important;
   border-radius:6px !important; box-shadow:0 6px 16px rgba(120,95,10,.30) !important;
