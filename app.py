@@ -157,9 +157,17 @@ def concat(files, out, fast=False):
     subprocess.run(cmd, check=True, capture_output=True)
     return out
 
+def loading(sub=""):
+    """HTML-анимация загрузки: книга с перелистыванием + «Озвучка» (+ опц. подпись)."""
+    sub_html = ('<div class="bk-sub">%s</div>' % sub) if sub else ""
+    return ('<div class="book-loader"><div class="bk">'
+            '<span class="pg l"></span><span class="pg r"></span><span class="pg f"></span>'
+            '</div><div class="bk-title">Озвучка</div>' + sub_html + '</div>')
+
 async def generate(text, uploaded_file, speed=0):
     """Async-генератор: отдаёт растущий файл по мере готовности (прогрессивное
     прослушивание), в конце — полную озвучку. Порядок фрагментов сохраняется."""
+    yield None, loading()          # книга-загрузчик появляется сразу по нажатию
     # Собираем текст из файлов: .txt читаем, фото распознаём (OCR) ПАРАЛЛЕЛЬНО, порядок сохраняем.
     files = uploaded_file if isinstance(uploaded_file, list) else ([uploaded_file] if uploaded_file else [])
     if files:
@@ -189,7 +197,7 @@ async def generate(text, uploaded_file, speed=0):
             tasks = [asyncio.create_task(_do(i)) for i in img_idx]
             for coro in asyncio.as_completed(tasks):
                 k = await coro
-                yield None, "🔎 Распознаю текст с фото… %d из %d" % (k, len(img_idx))
+                yield None, loading("Распознаю фото %d из %d" % (k, len(img_idx)))
         joined = "\n\n".join(r.strip() for r in results if r and r.strip())
         if joined:
             text = joined
@@ -224,7 +232,7 @@ async def generate(text, uploaded_file, speed=0):
             if part_files:
                 try:
                     part = await asyncio.to_thread(concat, part_files, out + ".part.mp3", True)
-                    yield part, "▶ Можно слушать начало. Озвучено %d из %d, остальное догружается…" % (done, n)
+                    yield part, loading("Можно слушать начало · %d из %d" % (done, n))
                 except Exception:
                     pass
 
@@ -242,9 +250,9 @@ async def generate(text, uploaded_file, speed=0):
     except Exception:                        # страховка, если копия всё же не прошла
         final = await asyncio.to_thread(concat, files, out, False)
     failed = n - len(files)
-    note = "✅ Готово полностью: фрагментов — %d." % len(files)
+    note = '<div class="done-note">Готово <span class="chk">✓</span></div>'
     if failed:
-        note += " ⚠️ Не удалось — %d (нажмите «Озвучить» ещё раз)." % failed
+        note += '<div class="bk-sub" style="text-align:center">не удалось %d — нажмите «Озвучить» ещё раз</div>' % failed
     yield final, note
 
 # Оформление «Парижский салон»: тёплый айвори, пыльная роза, антикварное золото,
@@ -261,7 +269,8 @@ CSS = """
   --body-text-color:#322D28 !important; --body-text-color-subdued:#6b625a !important;
   --block-label-text-color:#4A4038 !important; --block-title-text-color:#4A4038 !important;
   --border-color-primary:#D9C9A8 !important; --block-border-color:#D9C9A8 !important;
-  --color-accent:#137395 !important; --slider-color:#137395 !important;
+  --color-accent:#CB9AA8 !important; --color-accent-soft:#E9CAD0 !important;
+  --border-color-accent:#CB9AA8 !important; --slider-color:#CB9AA8 !important;
   color:#322D28 !important;
   min-height:100vh !important; display:flex !important; flex-direction:column !important; justify-content:center !important;
 }
@@ -289,7 +298,7 @@ textarea, input[type=text] {
   background:#FCFBF8 !important; border:1px solid #D9C9A8 !important; border-radius:3px !important;
   color:#322D28 !important; font-family:'Lora',serif !important;
 }
-textarea:focus, input:focus { border-color:#28364B !important; box-shadow:0 0 0 2px rgba(40,54,75,.18) !important; }
+textarea:focus, input:focus { border-color:#CB9AA8 !important; box-shadow:0 0 0 2px rgba(203,154,168,.30) !important; }
 /* кнопка — бирюзовый градиент как на Summary */
 #go-btn, #go-btn button {
   background:linear-gradient(120deg,#8F6908 0%, #CCAC00 55%, #A67D0A 100%) !important;
@@ -316,6 +325,24 @@ textarea:focus, input:focus { border-color:#28364B !important; box-shadow:0 0 0 
   font-size:15px !important; padding:2px 3px !important; box-shadow:none !important; line-height:1 !important;
 }
 #text-tools button:hover { background:transparent !important; filter:brightness(1.15); }
+/* анимация загрузки: минималистичная книга с перелистыванием + «Озвучка» */
+.book-loader { display:flex; flex-direction:column; align-items:center; gap:10px; padding:26px 0 10px; }
+.book-loader .bk { position:relative; width:78px; height:52px; perspective:340px; }
+.book-loader .bk .pg { position:absolute; top:0; height:52px; width:38px; box-sizing:border-box;
+  background:#FBFAF7; border:1px solid #B4925A; }
+.book-loader .bk .l { left:1px; border-radius:3px 0 0 3px; }
+.book-loader .bk .r { right:1px; border-left:none; border-radius:0 3px 3px 0; }
+.book-loader .bk .f { left:39px; width:38px; transform-origin:left center; border-radius:0 3px 3px 0;
+  background:#FCFBF8; backface-visibility:hidden; animation:pageflip 1.5s infinite ease-in-out; }
+@keyframes pageflip {
+  0%{transform:rotateY(0);opacity:1} 50%{transform:rotateY(-180deg);opacity:1}
+  52%{opacity:0} 99%{transform:rotateY(-180deg);opacity:0} 100%{transform:rotateY(0);opacity:0}
+}
+.book-loader .bk-title { font-family:'Playfair Display',serif; font-style:italic; color:#8A6D4B;
+  font-size:16px; letter-spacing:2px; }
+.book-loader .bk-sub { font-family:'Lora',serif; color:#a99f92; font-size:12.5px; }
+.done-note { font-family:'Playfair Display',serif; font-style:italic; color:#322D28; font-size:17px; padding:16px 0 4px; text-align:center; }
+.done-note .chk { margin-left:5px; color:#322D28; }
 footer { display:none !important; }
 """
 
@@ -360,16 +387,17 @@ with gr.Blocks(title="Аудиотекст", css=CSS) as demo:
                 with gr.Row(elem_id="text-tools"):
                     paste_btn = gr.Button("📋", elem_id="paste-btn", elem_classes="icon-btn", min_width=42, scale=0)
                     clear_btn = gr.Button("🗑", elem_id="clear-btn", elem_classes="icon-btn", min_width=42, scale=0)
-                text = gr.Textbox(label="Текст", lines=7, placeholder="Вставьте текст…")
+                text = gr.Textbox(label="Текст", lines=7, max_lines=7, placeholder="Вставьте текст…")
                 file = gr.File(label="Загрузите файлы — .txt, .jpg, .png, .webp",
                                file_count="multiple",
                                file_types=[".txt", ".jpg", ".jpeg", ".png", ".webp", ".bmp", ".tiff"],
                                type="filepath", elem_id="file-up")
                 btn = gr.Button("Озвучить", variant="primary", size="lg", elem_id="go-btn")
             with gr.Column(scale=2):
-                audio = gr.Audio(label="Аудио — слушать и скачать", type="filepath")
-                status = gr.Markdown()
-        btn.click(generate, [text, file], [audio, status])
+                audio = gr.Audio(label="Аудио — слушать и скачать", type="filepath",
+                                 waveform_options=gr.WaveformOptions(waveform_color="#CFC1AE", waveform_progress_color="#CB9AA8"))
+                status = gr.HTML()
+        btn.click(generate, [text, file], [audio, status], show_progress="hidden")
         paste_btn.click(None, [text], [text], js=PASTE_JS)
         clear_btn.click(None, None, [text], js="() => ''")
     demo.load(None, None, None, js=TITLE_JS)
