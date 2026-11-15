@@ -291,18 +291,20 @@ textarea:focus, input:focus { border-color:#28364B !important; box-shadow:0 0 0 
 /* кнопка — бирюзовый градиент как на Summary */
 #go-btn, #go-btn button {
   background:linear-gradient(120deg,#8F6908 0%, #CCAC00 55%, #A67D0A 100%) !important;
-  border:none !important; color:#ffffff !important; text-shadow:0 1px 2px rgba(70,52,0,.5) !important;
+  border:none !important; color:#ffffff !important;
   font-family:'Playfair Display',serif !important; font-style:normal !important;
   font-weight:700 !important; font-size:20px !important; letter-spacing:.5px !important;
   border-radius:6px !important; box-shadow:0 6px 16px rgba(120,95,10,.30) !important;
 }
 #go-btn:hover, #go-btn button:hover { filter:brightness(1.06); }
 /* файловая зона — короче, чтобы не прокручивать до кнопки */
-#file-up { max-height:140px !important; overflow:auto !important; }
-#file-up .wrap { min-height:70px !important; }
+#file-up { max-height:150px !important; overflow:auto !important; }
+#file-up .wrap { min-height:64px !important; font-size:12.5px !important; color:#b0a596 !important; }
+#file-up .wrap *, #file-up .or { font-size:12.5px !important; color:#b0a596 !important; }
+#file-up svg { opacity:.55 !important; }
 /* иконки-кнопки (вставить/очистить) — крошечные, в правом верхнем углу поля текста */
 #text-col { position:relative; }
-#text-tools { position:absolute !important; top:0; right:6px; z-index:6; display:flex !important;
+#text-tools { position:absolute !important; top:9px; right:6px; z-index:6; display:flex !important;
               gap:5px; margin:0 !important; width:auto !important; min-width:0 !important; }
 #text-tools .icon-btn, #text-tools > div { min-width:0 !important; flex:0 0 auto !important; }
 #text-tools button {
@@ -322,10 +324,25 @@ PASTE_JS = """async (cur) => {
     return (cur && cur.trim()) ? (cur + "\\n\\n" + t) : t;
   } catch (e) { return cur; }
 }"""
-TITLE_JS = ("() => { try {"
-            " document.querySelector('#paste-btn button').title='Вставить из буфера обмена';"
-            " document.querySelector('#clear-btn button').title='Очистить весь текст';"
-            " } catch(e){} }")
+TITLE_JS = """() => {
+  try {
+    document.querySelector('#paste-btn button').title='Вставить из буфера обмена';
+    document.querySelector('#clear-btn button').title='Очистить весь текст';
+  } catch(e){}
+  const apply = () => { try {
+    const gc = document.querySelector('.gradio-container');
+    const salon = document.querySelector('#salon');
+    if (gc && salon) {
+      gc.style.setProperty('display','flex','important');
+      gc.style.setProperty('flex-direction','column','important');
+      gc.style.setProperty('justify-content','center','important');
+      gc.style.setProperty('min-height','100vh','important');
+      let el = salon.parentElement;
+      while (el && el !== gc) { el.style.setProperty('flex','0 0 auto','important'); el = el.parentElement; }
+    }
+  } catch(e){} };
+  apply(); setTimeout(apply, 500); window.addEventListener('resize', apply);
+}"""
 with gr.Blocks(title="Аудиотекст", css=CSS) as demo:
     with gr.Column(elem_id="salon"):
         gr.HTML(
