@@ -157,7 +157,7 @@ def concat(files, out, fast=False):
     subprocess.run(cmd, check=True, capture_output=True)
     return out
 
-async def generate(text, uploaded_file, speed):
+async def generate(text, uploaded_file, speed=0):
     """Async-генератор: отдаёт растущий файл по мере готовности (прогрессивное
     прослушивание), в конце — полную озвучку. Порядок фрагментов сохраняется."""
     # Собираем текст из файлов: .txt читаем, фото распознаём (OCR) ПАРАЛЛЕЛЬНО, порядок сохраняем.
@@ -272,7 +272,9 @@ body { background:#15110e !important; }
   background:#FBFAF7; border:1px solid #B4925A; border-radius:4px;
   padding:16px 30px 22px; margin:0 !important;
   box-shadow:0 0 0 4px #FBFAF7, 0 0 0 5px rgba(180,146,90,.75), 0 18px 44px rgba(10,8,6,.30);
+  animation:salonIn .8s ease-out both;
 }
+@keyframes salonIn { from { opacity:0 } to { opacity:1 } }
 /* баннер-заголовок */
 #app-banner { text-align:center; margin-bottom:6px; }
 #app-banner .title {
@@ -343,32 +345,8 @@ TITLE_JS = """() => {
     }
   } catch(e){} };
   apply(); setTimeout(apply, 500); window.addEventListener('resize', apply);
-  // ---- благородный вход: «штора» уходит + элементы всплывают ----
-  try {
-    const ov = document.createElement('div');
-    ov.style.cssText = 'position:fixed;inset:0;background:#15110e;z-index:9999;pointer-events:none;opacity:1;transition:opacity .9s ease';
-    document.body.appendChild(ov);
-    requestAnimationFrame(() => { ov.style.opacity = '0'; });
-    setTimeout(() => ov.remove(), 1100);
-  } catch(e){}
-  let tries = 0;
-  const entrance = () => {
-    const salon = document.querySelector('#salon');
-    if (!salon || salon.dataset.entered) return;
-    if (!window.gsap) { if (tries++ < 12) setTimeout(entrance, 180); return; }
-    salon.dataset.entered = '1';
-    const tl = gsap.timeline({ defaults: { ease: 'power2.out' } });
-    tl.from('#salon', { opacity:0, y:24, duration:.75 })
-      .from('#app-banner .title', { opacity:0, y:16, duration:.6 }, '-=.4')
-      .from('#app-banner .rule', { scaleX:0, transformOrigin:'center', duration:.5 }, '-=.3')
-      .from('#app-banner .fleuron', { opacity:0, y:-4, duration:.4 }, '-=.15')
-      .from('#salon .block', { opacity:0, y:14, duration:.5, stagger:.05 }, '-=.3');
-  };
-  entrance();
 }"""
-
-HEAD = '<script src="https://cdnjs.cloudflare.com/ajax/libs/gsap/3.12.5/gsap.min.js"></script>'
-with gr.Blocks(title="Аудиотекст", css=CSS, head=HEAD) as demo:
+with gr.Blocks(title="Аудиотекст", css=CSS) as demo:
     with gr.Column(elem_id="salon"):
         gr.HTML(
             '<div id="app-banner">'
@@ -387,12 +365,11 @@ with gr.Blocks(title="Аудиотекст", css=CSS, head=HEAD) as demo:
                                file_count="multiple",
                                file_types=[".txt", ".jpg", ".jpeg", ".png", ".webp", ".bmp", ".tiff"],
                                type="filepath", elem_id="file-up")
-                speed = gr.Slider(-50, 100, value=0, step=5, label="Скорость речи")
                 btn = gr.Button("Озвучить", variant="primary", size="lg", elem_id="go-btn")
             with gr.Column(scale=2):
                 audio = gr.Audio(label="Аудио — слушать и скачать", type="filepath")
                 status = gr.Markdown()
-        btn.click(generate, [text, file, speed], [audio, status])
+        btn.click(generate, [text, file], [audio, status])
         paste_btn.click(None, [text], [text], js=PASTE_JS)
         clear_btn.click(None, None, [text], js="() => ''")
     demo.load(None, None, None, js=TITLE_JS)
