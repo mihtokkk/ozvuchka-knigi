@@ -265,12 +265,13 @@ CSS = """
   color:#322D28 !important;
 }
 body { background:#15110e !important; }
-.gradio-container .main { max-width:900px; margin:0 auto; min-height:100vh; box-sizing:border-box;
-  display:flex; flex-direction:column; justify-content:center; padding:24px 0; }
+.gradio-container .main { max-width:900px !important; margin:0 auto !important; min-height:100vh !important;
+  box-sizing:border-box !important; display:flex !important; flex-direction:column !important;
+  justify-content:center !important; padding:18px 0 !important; }
 /* рамка-гравюра вокруг всего */
 #salon {
   background:#FBFAF7; border:1px solid #B4925A; border-radius:4px;
-  padding:16px 30px 22px; margin:6px auto 12px;
+  padding:16px 30px 22px; margin:auto 0 !important;
   box-shadow:0 0 0 4px #FBFAF7, 0 0 0 5px rgba(180,146,90,.75), 0 18px 44px rgba(10,8,6,.30);
 }
 /* баннер-заголовок */
@@ -290,28 +291,28 @@ textarea, input[type=text] {
 textarea:focus, input:focus { border-color:#28364B !important; box-shadow:0 0 0 2px rgba(40,54,75,.18) !important; }
 /* кнопка — бирюзовый градиент как на Summary */
 #go-btn, #go-btn button {
-  background:linear-gradient(120deg,#072E3D 0%, #0F5A74 55%, #137395 100%) !important;
-  border:none !important; color:#ffffff !important;
+  background:linear-gradient(120deg,#8F6908 0%, #CCAC00 55%, #A67D0A 100%) !important;
+  border:none !important; color:#3A2C08 !important;
   font-family:'Playfair Display',serif !important; font-style:normal !important;
-  font-weight:600 !important; font-size:20px !important; letter-spacing:.5px !important;
-  border-radius:6px !important; box-shadow:0 6px 16px rgba(7,46,61,.30) !important;
+  font-weight:700 !important; font-size:20px !important; letter-spacing:.5px !important;
+  border-radius:6px !important; box-shadow:0 6px 16px rgba(120,95,10,.30) !important;
 }
-#go-btn:hover, #go-btn button:hover { filter:brightness(1.08); }
+#go-btn:hover, #go-btn button:hover { filter:brightness(1.06); }
 /* файловая зона — короче, чтобы не прокручивать до кнопки */
 #file-up { max-height:140px !important; overflow:auto !important; }
 #file-up .wrap { min-height:70px !important; }
-/* иконки-кнопки (вставить/очистить) — маленькие, в правом верхнем углу поля текста */
+/* иконки-кнопки (вставить/очистить) — крошечные, в правом верхнем углу поля текста */
 #text-col { position:relative; }
-#text-tools { position:absolute !important; top:1px; right:2px; z-index:6; display:flex !important;
-              gap:6px; margin:0 !important; width:auto !important; min-width:0 !important; }
-.icon-btn { min-width:0 !important; flex:0 0 auto !important; }
-.icon-btn button, .icon-btn > button {
-  min-width:28px !important; width:28px !important; height:24px !important; flex:0 0 auto !important;
-  background:#FBFAF7 !important; background-image:none !important; border:1px solid #D9C9A8 !important;
-  color:#4A4038 !important; border-radius:6px !important; font-size:13px !important; padding:0 !important;
-  box-shadow:none !important; line-height:1 !important;
+#text-tools { position:absolute !important; top:0; right:6px; z-index:6; display:flex !important;
+              gap:5px; margin:0 !important; width:auto !important; min-width:0 !important; }
+#text-tools .icon-btn, #text-tools > div { min-width:0 !important; flex:0 0 auto !important; }
+#text-tools button {
+  min-width:0 !important; width:auto !important; max-width:none !important; height:auto !important;
+  flex:0 0 auto !important; background:transparent !important; background-image:none !important;
+  border:none !important; color:#4A4038 !important; border-radius:0 !important;
+  font-size:15px !important; padding:2px 3px !important; box-shadow:none !important; line-height:1 !important;
 }
-.icon-btn button:hover { background:#F3EEE4 !important; border-color:#B4925A !important; }
+#text-tools button:hover { background:transparent !important; filter:brightness(1.15); }
 footer { display:none !important; }
 """
 
@@ -340,13 +341,12 @@ with gr.Blocks(title="Аудиотекст", css=CSS) as demo:
                 with gr.Row(elem_id="text-tools"):
                     paste_btn = gr.Button("📋", elem_id="paste-btn", elem_classes="icon-btn", min_width=42, scale=0)
                     clear_btn = gr.Button("🗑", elem_id="clear-btn", elem_classes="icon-btn", min_width=42, scale=0)
-                text = gr.Textbox(label="Текст", lines=7, placeholder="Вставьте сюда текст…")
-                file = gr.File(label="Загрузите файлы — .txt, .jpg, .png, .webp (можно несколько)",
+                text = gr.Textbox(label="Текст", lines=7, placeholder="Вставьте текст…")
+                file = gr.File(label="Загрузите файлы — .txt, .jpg, .png, .webp",
                                file_count="multiple",
                                file_types=[".txt", ".jpg", ".jpeg", ".png", ".webp", ".bmp", ".tiff"],
                                type="filepath", elem_id="file-up")
-                speed = gr.Slider(-50, 100, value=0, step=5,
-                                  label="Скорость речи, %  (− медленнее · + быстрее)")
+                speed = gr.Slider(-50, 100, value=0, step=5, label="Скорость речи")
                 btn = gr.Button("Озвучить", variant="primary", size="lg", elem_id="go-btn")
             with gr.Column(scale=2):
                 audio = gr.Audio(label="Аудио — слушать и скачать", type="filepath")
