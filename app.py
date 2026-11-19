@@ -259,7 +259,7 @@ async def generate(text, uploaded_file, speed=0):
 # петербургская синь нотой; заголовок Playfair Display курсивом, золотая рамка-гравюра.
 CSS = """
 @import url('https://fonts.googleapis.com/css2?family=Playfair+Display:ital,wght@0,600;1,500;1,600;1,700&family=Lora:wght@400;500&display=swap');
-.gradio-container { background:#15110e background:transparent !important; font-family:'Lora',Georgia,serif !important; color:#322D28; --slider-color:#137395; --color-accent:#137395; }
+.gradio-container { background:transparent !important; font-family:'Lora',Georgia,serif !important; color:#322D28; --slider-color:#137395; --color-accent:#137395; }
 /* принудительно светлая «салонная» палитра в ЛЮБОЙ теме (и тёмной тоже) */
 .gradio-container, .gradio-container.dark, .dark .gradio-container {
   --body-background-fill:transparent !important;
@@ -293,31 +293,13 @@ body { background:#15110e !important; }
   background:#FBFAF7; border:1px solid rgba(180,146,90,.18); border-radius:4px;
   padding:16px 30px 22px; margin:0 !important;
   box-shadow:0 18px 44px rgba(10,8,6,.30);
-  animation:salonIn 2.6s cubic-bezier(.4,0,.2,1) both;
-  transform-origin:50% 48%;
-  will-change:opacity,transform,box-shadow;
+  /* Спокойное появление без движения и анимируемой тени: только ровное проявление. */
+  animation:salonIn 1.55s ease-in-out both;
+  will-change:opacity;
 }
 @keyframes salonIn {
-  0% {
-    opacity:0;
-    transform:translate3d(0,9px,0) scale(.992);
-    box-shadow:0 12px 30px rgba(10,8,6,0);
-  }
-  34% {
-    opacity:.22;
-    transform:translate3d(0,6px,0) scale(.995);
-    box-shadow:0 14px 34px rgba(10,8,6,.07);
-  }
-  72% {
-    opacity:.78;
-    transform:translate3d(0,2px,0) scale(.998);
-    box-shadow:0 17px 40px rgba(10,8,6,.20);
-  }
-  100% {
-    opacity:1;
-    transform:translate3d(0,0,0) scale(1);
-    box-shadow:0 18px 44px rgba(10,8,6,.30);
-  }
+  from { opacity:0; }
+  to   { opacity:1; }
 }
 /* Две золотые линии прорисовываются от центра нижней стороны к центру верхней. */
 #salon .salon-frame-draw {
@@ -417,7 +399,8 @@ PASTE_JS = """async (cur) => {
   } catch (e) { return cur; }
 }"""
 TITLE_JS = """() => {
-  // Каждый запуск страницы получает новую раскладку фотографий.
+  // Каждый запуск меняет только фотографии местами. Геометрия коллажа
+  // остаётся постоянной: те же 4 колонки, 3 ряда и одинаковые размеры ячеек.
   const collageImages = __COLLAGE_IMAGES__;
   const buildRandomCollage = () => {
     let layer = document.getElementById('random-collage');
@@ -428,41 +411,32 @@ TITLE_JS = """() => {
       document.body.prepend(layer);
     }
     layer.innerHTML = '';
-    const shuffled = [...collageImages].sort(() => Math.random() - 0.5);
-    const mobile = window.innerWidth < 700;
-    const cols = mobile ? 3 : 4;
-    const rows = mobile ? 4 : 3;
+    const shuffled = [...collageImages];
+    // Fisher–Yates: случайная перестановка без изменения самих мест.
+    for (let i = shuffled.length - 1; i > 0; i--) {
+      const j = Math.floor(Math.random() * (i + 1));
+      [shuffled[i], shuffled[j]] = [shuffled[j], shuffled[i]];
+    }
+    const cols = 4;
+    const rows = 3;
     shuffled.forEach((src, index) => {
       const img = document.createElement('img');
       img.src = src;
       img.alt = '';
       const col = index % cols;
       const row = Math.floor(index / cols);
-      const cellW = 100 / cols;
-      const cellH = 100 / rows;
-      const jitterX = (Math.random() - .5) * (mobile ? 9 : 10);
-      const jitterY = (Math.random() - .5) * (mobile ? 8 : 12);
-      const left = (col + .5) * cellW + jitterX;
-      const top = (row + .5) * cellH + jitterY;
-      const width = mobile
-        ? 29 + Math.random() * 9
-        : 22 + Math.random() * 9;
-      const rotation = (Math.random() - .5) * 4.2;
-      const scale = .94 + Math.random() * .12;
-      img.style.width = `clamp(${mobile ? 125 : 210}px, ${width}vw, ${mobile ? 260 : 440}px)`;
-      img.style.left = `${left}%`;
-      img.style.top = `${top}%`;
-      img.style.opacity = `${.68 + Math.random() * .17}`;
-      img.style.transform = `translate(-50%, -50%) rotate(${rotation}deg) scale(${scale})`;
+      img.style.left = `${col * 100 / cols}%`;
+      img.style.top = `${row * 100 / rows}%`;
+      img.style.width = `${100 / cols}%`;
+      img.style.height = `${100 / rows}%`;
+      img.style.opacity = '.78';
+      img.style.transform = 'none';
+      img.style.borderRadius = '0';
       layer.appendChild(img);
     });
   };
   buildRandomCollage();
-  let collageResizeTimer;
-  window.addEventListener('resize', () => {
-    clearTimeout(collageResizeTimer);
-    collageResizeTimer = setTimeout(buildRandomCollage, 180);
-  });
+  // При изменении размера окна не перемешиваем изображения повторно.
   try {
     document.querySelector('#paste-btn button').title='Вставить из буфера обмена';
     document.querySelector('#clear-btn button').title='Очистить весь текст';
