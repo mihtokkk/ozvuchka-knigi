@@ -15,7 +15,7 @@ except Exception:
 
 # --- Обработка голоса «Вера» ---
 # Тон: тепло, тело, de-ess, pitch +5Hz.
-# Паузы после запятых и точек одинаково короткие.
+# Паузы после предложений чуть длиннее, после запятых — короткие.
 #
 VERA_AF = (
     "highpass=f=70,"
@@ -23,7 +23,7 @@ VERA_AF = (
     "equalizer=f=450:t=q:w=1.2:g=1.5,"
     "equalizer=f=6800:t=q:w=1.5:g=-3.5,"
     "acompressor=threshold=0.08:ratio=2:attack=20:release=250:makeup=1.5,"
-    "silenceremove=stop_periods=-1:stop_duration=0.04:stop_threshold=-40dB:stop_silence=0.02,"
+    "silenceremove=stop_periods=-1:stop_duration=0.08:stop_threshold=-42dB:stop_silence=0.06,"
     "loudnorm=I=-16:TP=-1.5:LRA=11"
 )
 VERA_MASTER_AF = "loudnorm=I=-16:TP=-1.5:LRA=11"
