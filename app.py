@@ -278,37 +278,50 @@ body { background:#15110e !important; }
 .gradio-container .main { max-width:1200px !important; width:100% !important; margin:0 auto !important; padding:18px 0 !important; }
 /* рамка-гравюра вокруг всего */
 #salon {
-  background:#FBFAF7; border:1px solid #B4925A; border-radius:4px;
+  position:relative !important; overflow:visible !important;
+  background:#FBFAF7; border:1px solid rgba(180,146,90,.18); border-radius:4px;
   padding:16px 30px 22px; margin:0 !important;
-  box-shadow:0 0 0 4px #FBFAF7, 0 0 0 5px rgba(180,146,90,.75), 0 18px 44px rgba(10,8,6,.30);
-  animation:salonIn 1.7s cubic-bezier(.22,1,.36,1) both;
+  box-shadow:0 18px 44px rgba(10,8,6,.30);
+  animation:salonIn 1.8s cubic-bezier(.22,1,.36,1) both;
   transform-origin:50% 48%;
-  will-change:opacity,transform,filter,box-shadow;
+  will-change:opacity,transform,box-shadow;
 }
 @keyframes salonIn {
   0% {
     opacity:0;
-    transform:translate3d(0,22px,0) scale(.975);
-    filter:blur(7px);
-    box-shadow:0 0 0 4px rgba(251,250,247,0),
-               0 0 0 5px rgba(180,146,90,0),
-               0 10px 26px rgba(10,8,6,0);
-  }
-  55% {
-    opacity:.82;
-    filter:blur(1.2px);
+    transform:translate3d(0,18px,0) scale(.985);
+    box-shadow:0 10px 26px rgba(10,8,6,0);
   }
   100% {
     opacity:1;
     transform:translate3d(0,0,0) scale(1);
-    filter:blur(0);
-    box-shadow:0 0 0 4px #FBFAF7,
-               0 0 0 5px rgba(180,146,90,.75),
-               0 18px 44px rgba(10,8,6,.30);
+    box-shadow:0 18px 44px rgba(10,8,6,.30);
   }
+}
+/* Две золотые линии прорисовываются от центра нижней стороны к центру верхней. */
+#salon .salon-frame-draw {
+  position:absolute; inset:-5px; width:calc(100% + 10px); height:calc(100% + 10px);
+  overflow:visible; pointer-events:none; z-index:20;
+}
+#salon .salon-frame-draw .frame-line {
+  fill:none; stroke:#B4925A; stroke-width:1.25; stroke-linecap:round;
+  vector-effect:non-scaling-stroke; opacity:.92;
+}
+#salon .salon-frame-draw .frame-star {
+  fill:#D2B574; stroke:#A9874C; stroke-width:.45;
+  transform-box:fill-box; transform-origin:center;
+  opacity:0; animation:frameStar 260ms cubic-bezier(.16,.8,.3,1) 1.72s both;
+}
+@keyframes frameStar {
+  0% { opacity:0; transform:scale(.15); }
+  28% { opacity:1; transform:scale(1.18); }
+  58% { opacity:.9; transform:scale(.82); }
+  100% { opacity:0; transform:scale(.05); }
 }
 @media (prefers-reduced-motion: reduce) {
   #salon { animation:none; will-change:auto; }
+  #salon .salon-frame-draw .frame-line { stroke-dasharray:none !important; stroke-dashoffset:0 !important; }
+  #salon .salon-frame-draw .frame-star { animation:none; opacity:0; }
 }
 /* баннер-заголовок */
 #app-banner { text-align:center; margin-bottom:6px; }
@@ -384,7 +397,48 @@ TITLE_JS = """() => {
     document.querySelector('#paste-btn button').title='Вставить из буфера обмена';
     document.querySelector('#clear-btn button').title='Очистить весь текст';
   } catch(e){}
-  // ---- вертикальное центрирование карточки ----
+
+  // Дорисовываем рамку двумя симметричными штрихами и ставим звезду в точке встречи.
+  const drawFrame = () => {
+    const salon = document.querySelector('#salon');
+    if (!salon) return;
+    let svg = salon.querySelector('.salon-frame-draw');
+    if (!svg) {
+      svg = document.createElementNS('http://www.w3.org/2000/svg','svg');
+      svg.setAttribute('class','salon-frame-draw');
+      svg.setAttribute('aria-hidden','true');
+      svg.innerHTML = '<path class="frame-line left-line"/><path class="frame-line right-line"/>' +
+        '<path class="frame-star" d="M0,-7 L1.8,-1.8 L7,0 L1.8,1.8 L0,7 L-1.8,1.8 L-7,0 L-1.8,-1.8 Z"/>';
+      salon.appendChild(svg);
+    }
+    const w = salon.clientWidth + 10;
+    const h = salon.clientHeight + 10;
+    const sizeKey = `${w}x${h}`;
+    if (svg.dataset.frameSize === sizeKey) return;
+    svg.dataset.frameSize = sizeKey;
+    svg.setAttribute('viewBox', `0 0 ${w} ${h}`);
+    const inset = 5, r = 4, cx = w/2, top = inset, bottom = h-inset;
+    const left = `M ${cx} ${bottom} L ${inset+r} ${bottom} Q ${inset} ${bottom} ${inset} ${bottom-r} L ${inset} ${top+r} Q ${inset} ${top} ${inset+r} ${top} L ${cx} ${top}`;
+    const right = `M ${cx} ${bottom} L ${w-inset-r} ${bottom} Q ${w-inset} ${bottom} ${w-inset} ${bottom-r} L ${w-inset} ${top+r} Q ${w-inset} ${top} ${w-inset-r} ${top} L ${cx} ${top}`;
+    const paths = [svg.querySelector('.left-line'), svg.querySelector('.right-line')];
+    [left,right].forEach((d,i) => {
+      const path = paths[i]; path.setAttribute('d',d);
+      const len = path.getTotalLength();
+      path.style.strokeDasharray = len;
+      path.style.strokeDashoffset = len;
+      path.style.animation = 'none';
+      void path.getBoundingClientRect();
+      path.style.animation = `frameDraw 1.5s cubic-bezier(.42,0,.25,1) .3s forwards`;
+    });
+    const star = svg.querySelector('.frame-star');
+    star.setAttribute('transform', `translate(${cx} ${top})`);
+  };
+  if (!document.querySelector('#salon-frame-keyframes')) {
+    const style = document.createElement('style');
+    style.id = 'salon-frame-keyframes';
+    style.textContent = '@keyframes frameDraw { to { stroke-dashoffset:0; } }';
+    document.head.appendChild(style);
+  }
   const apply = () => { try {
     const gc = document.querySelector('.gradio-container');
     const salon = document.querySelector('#salon');
@@ -395,6 +449,7 @@ TITLE_JS = """() => {
       gc.style.setProperty('min-height','100vh','important');
       let el = salon.parentElement;
       while (el && el !== gc) { el.style.setProperty('flex','0 0 auto','important'); el = el.parentElement; }
+      drawFrame();
     }
   } catch(e){} };
   apply(); setTimeout(apply, 500); window.addEventListener('resize', apply);
