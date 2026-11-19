@@ -304,19 +304,19 @@ body { background:#15110e !important; }
   overflow:visible; pointer-events:none; z-index:20;
 }
 #salon .salon-frame-draw .frame-line {
-  fill:none; stroke:#B4925A; stroke-width:1.25; stroke-linecap:round;
-  vector-effect:non-scaling-stroke; opacity:.92;
+  fill:none; stroke:#B4925A; stroke-width:1.45; stroke-linecap:round;
+  vector-effect:non-scaling-stroke; opacity:.96;
 }
 #salon .salon-frame-draw .frame-star {
-  fill:#D2B574; stroke:#A9874C; stroke-width:.45;
+  fill:#E5C779; stroke:#A9874C; stroke-width:.45;
   transform-box:fill-box; transform-origin:center;
-  opacity:0; animation:frameStar 260ms cubic-bezier(.16,.8,.3,1) 1.72s both;
+  opacity:0; animation:frameStar 300ms cubic-bezier(.16,.8,.3,1) 1.8s both;
 }
 @keyframes frameStar {
-  0% { opacity:0; transform:scale(.15); }
-  28% { opacity:1; transform:scale(1.18); }
-  58% { opacity:.9; transform:scale(.82); }
-  100% { opacity:0; transform:scale(.05); }
+  0% { opacity:0; transform:scale(.12); }
+  24% { opacity:1; transform:scale(1.22); }
+  55% { opacity:.95; transform:scale(.88); }
+  100% { opacity:0; transform:scale(.04); }
 }
 @media (prefers-reduced-motion: reduce) {
   #salon { animation:none; will-change:auto; }
@@ -428,15 +428,20 @@ TITLE_JS = """() => {
       path.style.strokeDashoffset = len;
       path.style.animation = 'none';
       void path.getBoundingClientRect();
-      path.style.animation = `frameDraw 1.5s cubic-bezier(.42,0,.25,1) .3s forwards`;
+      // Во время движения линия заметно светлее и слегка светится;
+      // после соединения плавно возвращается к спокойному матовому золоту.
+      path.style.animation = `frameDraw 1.5s cubic-bezier(.42,0,.25,1) .3s forwards, frameGlow 2.6s cubic-bezier(.4,0,.2,1) .3s forwards`;
     });
     const star = svg.querySelector('.frame-star');
-    star.setAttribute('transform', `translate(${cx} ${top})`);
+    // Координаты самой звезды задаём непосредственно в SVG-пути:
+    // это гарантирует точное положение в центре верхнего соединения.
+    const sx = cx, sy = top;
+    star.setAttribute('d', `M ${sx} ${sy-7} L ${sx+1.8} ${sy-1.8} L ${sx+7} ${sy} L ${sx+1.8} ${sy+1.8} L ${sx} ${sy+7} L ${sx-1.8} ${sy+1.8} L ${sx-7} ${sy} L ${sx-1.8} ${sy-1.8} Z`);
   };
   if (!document.querySelector('#salon-frame-keyframes')) {
     const style = document.createElement('style');
     style.id = 'salon-frame-keyframes';
-    style.textContent = '@keyframes frameDraw { to { stroke-dashoffset:0; } }';
+    style.textContent = `@keyframes frameDraw { to { stroke-dashoffset:0; } } @keyframes frameGlow { 0% { stroke:#B4925A; filter:none; } 8% { stroke:#F0D58A; filter:drop-shadow(0 0 2px rgba(225,190,105,.85)) drop-shadow(0 0 5px rgba(225,190,105,.45)); } 58% { stroke:#F0D58A; filter:drop-shadow(0 0 2px rgba(225,190,105,.9)) drop-shadow(0 0 6px rgba(225,190,105,.5)); } 69% { stroke:#E8CB7F; filter:drop-shadow(0 0 2px rgba(225,190,105,.75)) drop-shadow(0 0 4px rgba(225,190,105,.35)); } 100% { stroke:#B4925A; filter:none; } }`;
     document.head.appendChild(style);
   }
   const apply = () => { try {
