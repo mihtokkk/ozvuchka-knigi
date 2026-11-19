@@ -13,25 +13,26 @@ try:
 except Exception:
     pytesseract = None
 
-# --- Обработка голоса «Вера» (ffmpeg, -af): тепло снизу, немного «тела», мягкая
-#     компрессия (слышнее дыхание), де-эссер против шипения, короткие паузы, ровная
-#     громкость. Только естественные фильтры — без эксайтера/сатурации («металл»). ---
+# --- Обработка голоса «Вера» ---
+# На отдельных фрагментах — только деликатная тональная коррекция и компрессия.
+# Паузы не вырезаем: они часть естественной фразировки синтезатора.
+# Финальную громкость нормализуем один раз на всей книге, а не отдельно по кускам.
 VERA_AF = (
-    "highpass=f=70,"
-    "bass=g=2.5:f=170,"
-    "equalizer=f=450:t=q:w=1.2:g=1.5,"
-    "equalizer=f=6800:t=q:w=1.5:g=-3.5,"
-    "acompressor=threshold=0.08:ratio=2:attack=20:release=250:makeup=1.5,"
-    "silenceremove=stop_periods=-1:stop_duration=0.16:stop_threshold=-42dB:stop_silence=0.07,"
-    "loudnorm=I=-16:TP=-1.5:LRA=11"
+    "highpass=f=65,"
+    "bass=g=1.0:f=160,"
+    "equalizer=f=350:t=q:w=1.0:g=-0.8,"
+    "equalizer=f=2800:t=q:w=1.1:g=0.8,"
+    "equalizer=f=7000:t=q:w=1.0:g=-1.0,"
+    "acompressor=threshold=0.12:ratio=1.5:attack=25:release=300:makeup=1.0"
 )
+VERA_MASTER_AF = "loudnorm=I=-18:TP=-1.5:LRA=7"
 # Голос Вера = Светлана с небольшим сдвигом высоты/темпа + обработка.
 VERA = {"voice": "ru-RU-SvetlanaNeural", "pitch": "+5Hz", "rate_bias": -2, "af": VERA_AF}
 
 # Параллельные запросы; размер крупного фрагмента; размер маленького первого (быстрый старт).
 CONCURRENCY = int(os.environ.get("TTS_CONCURRENCY", "8"))
 MAX_CHARS = int(os.environ.get("TTS_MAX_CHARS", "1500"))
-FIRST_CHARS = int(os.environ.get("TTS_FIRST_CHARS", "160"))
+FIRST_CHARS = int(os.environ.get("TTS_FIRST_CHARS", "500"))
 OCR_CONCURRENCY = int(os.environ.get("OCR_CONCURRENCY", "2"))   # сколько фото распознавать разом
 
 SENT_RE = re.compile(r'[^.!?…]+[.!?…]+|\S[^.!?…]*$')
@@ -141,8 +142,8 @@ async def _make_segment(sem, idx, text, speed, tmpdir, tries=5):
     return idx, None
 
 def concat(files, out, fast=False):
-    """Склейка фрагментов в один mp3 одним потоковым проходом (экономно по памяти).
-    fast=True — без перекодирования (-c copy), мгновенно, для промежуточных версий."""
+    """Склейка фрагментов. fast=True — потоковая склейка без перекодирования
+    для промежуточного прослушивания; финальный мастеринг выполняется отдельно."""
     if len(files) == 1:
         return files[0]
     listfile = out + ".txt"
@@ -156,6 +157,15 @@ def concat(files, out, fast=False):
                "-c:a", "libmp3lame", "-b:a", "96k", "-ar", "24000", out]
     subprocess.run(cmd, check=True, capture_output=True)
     return out
+
+def _vera_master(src, dst):
+    """Финальная нормализация целой книги: единый уровень без скачков между блоками."""
+    subprocess.run(
+        ["ffmpeg", "-y", "-i", src, "-af", VERA_MASTER_AF,
+         "-c:a", "libmp3lame", "-b:a", "96k", "-ar", "24000", dst],
+        check=True, capture_output=True
+    )
+    return dst
 
 def loading(sub=""):
     """HTML-анимация загрузки: книга с перелистыванием + «Озвучка» (+ опц. подпись)."""
@@ -245,10 +255,18 @@ async def generate(text, uploaded_file, speed=0):
     files = [p for p in results if p]
     if not files:
         raise gr.Error("Сервис голосов сейчас перегружен — попробуйте ещё раз через минуту.")
-    try:                                     # быстрая склейка без перекодирования (все фрагменты 96к/24кГц)
-        final = await asyncio.to_thread(concat, files, out, True)
-    except Exception:                        # страховка, если копия всё же не прошла
-        final = await asyncio.to_thread(concat, files, out, False)
+    # Сначала собираем чистый мастер без повторной нормализации каждого фрагмента,
+    # затем нормализуем уже всю книгу целиком — так громкость не «дышит» на стыках.
+    joined = os.path.join(tmpdir, "audiobook_joined.mp3")
+    try:
+        joined = await asyncio.to_thread(concat, files, joined, True)
+    except Exception:
+        joined = await asyncio.to_thread(concat, files, joined, False)
+    try:
+        final = await asyncio.to_thread(_vera_master, joined, out)
+    except Exception as e:
+        print("[Вера] финальный мастеринг не прошёл, отдаю склеенный звук:", repr(e), flush=True)
+        final = joined
     failed = n - len(files)
     note = '<div class="done-note">Готово <span class="chk">✓</span></div>'
     if failed:
