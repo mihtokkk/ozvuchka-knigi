@@ -14,26 +14,29 @@ except Exception:
     pytesseract = None
 
 # --- Обработка голоса «Вера» ---
-# Тёплый, спокойный голос. Паузы после точек и запятых сильно укорочены.
-# Скорость чуть медленнее обычной.
+# Чуть добрее и теплее. Паузы после точек чуть длиннее,
+# после запятых — по-прежнему короткие.
 #
 VERA_AF = (
     "highpass=f=70:poles=2,"
-    # Сильно укорачиваем паузы: режем всё тише -46dB и длиннее 80 мс
-    # (и после точек, и после запятых)
-    "silenceremove=stop_periods=-1:stop_duration=0.08:stop_threshold=-46dB:detection=rms,"
-    "bass=g=2.0:f=145:t=q:w=0.85,"
-    "equalizer=f=320:t=q:w=1.3:g=-1.3,"
-    "equalizer=f=2400:t=q:w=1.3:g=0.7,"
-    "equalizer=f=6200:t=q:w=1.5:g=-2.2,"
-    "equalizer=f=10500:t=q:w=1.0:g=0.4,"
-    "asoftclip=type=tanh:threshold=0.93,"
-    "acompressor=threshold=0.10:ratio=2.0:attack=28:release=280:makeup=1.5:knee=6"
+    # 0.10 сек: чуть длиннее, чем 0.08 — предложения дышат,
+    # но запятые всё ещё заметно короче исходных.
+    "silenceremove=stop_periods=-1:stop_duration=0.10:stop_threshold=-47dB:detection=rms,"
+    # Больше тепла и мягкости (добрее)
+    "bass=g=2.3:f=140:t=q:w=0.9,"
+    "equalizer=f=310:t=q:w=1.3:g=-1.4,"
+    # Presence ещё мягче — меньше резкости, больше доброты
+    "equalizer=f=2300:t=q:w=1.3:g=0.5,"
+    # Сильнее смягчаем шипящие
+    "equalizer=f=6000:t=q:w=1.5:g=-2.4,"
+    "equalizer=f=10000:t=q:w=1.0:g=0.3,"
+    "asoftclip=type=tanh:threshold=0.92,"
+    "acompressor=threshold=0.10:ratio=1.9:attack=30:release=300:makeup=1.4:knee=7"
 )
 VERA_MASTER_AF = "loudnorm=I=-18:TP=-1.5:LRA=7.5"
 
-# Скорость чуть медленнее (-4). Pitch спокойный.
-VERA = {"voice": "ru-RU-SvetlanaNeural", "pitch": "+1Hz", "rate_bias": -4, "af": VERA_AF}
+# Скорость чуть медленнее. Pitch спокойный и тёплый.
+VERA = {"voice": "ru-RU-SvetlanaNeural", "pitch": "+0Hz", "rate_bias": -4, "af": VERA_AF}
 
 # Параллельные запросы; размер крупного фрагмента; размер маленького первого (быстрый старт).
 CONCURRENCY = int(os.environ.get("TTS_CONCURRENCY", "8"))
