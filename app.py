@@ -14,29 +14,24 @@ except Exception:
     pytesseract = None
 
 # --- Обработка голоса «Вера» ---
-# Чуть добрее и теплее. Паузы после точек чуть длиннее,
-# после запятых — по-прежнему короткие.
+# Тон как в рабочей версии: тепло, тело, мягкий de-ess.
+# Pitch +5Hz — не «взрослый». Паузы умеренно короткие.
 #
 VERA_AF = (
-    "highpass=f=70:poles=2,"
-    # 0.10 сек: чуть длиннее, чем 0.08 — предложения дышат,
-    # но запятые всё ещё заметно короче исходных.
-    "silenceremove=stop_periods=-1:stop_duration=0.10:stop_threshold=-47dB:detection=rms,"
-    # Больше тепла и мягкости (добрее)
-    "bass=g=2.3:f=140:t=q:w=0.9,"
-    "equalizer=f=310:t=q:w=1.3:g=-1.4,"
-    # Presence ещё мягче — меньше резкости, больше доброты
-    "equalizer=f=2300:t=q:w=1.3:g=0.5,"
-    # Сильнее смягчаем шипящие
-    "equalizer=f=6000:t=q:w=1.5:g=-2.4,"
-    "equalizer=f=10000:t=q:w=1.0:g=0.3,"
-    "asoftclip=type=tanh:threshold=0.92,"
-    "acompressor=threshold=0.10:ratio=1.9:attack=30:release=300:makeup=1.4:knee=7"
+    "highpass=f=70,"
+    "bass=g=2.5:f=170,"
+    "equalizer=f=450:t=q:w=1.2:g=1.5,"
+    "equalizer=f=6800:t=q:w=1.5:g=-3.5,"
+    "acompressor=threshold=0.08:ratio=2:attack=20:release=250:makeup=1.5,"
+    # Паузы короче исходных, но не до нуля (0.12 + оставляем 70мс тишины)
+    "silenceremove=stop_periods=-1:stop_duration=0.12:stop_threshold=-42dB:stop_silence=0.07,"
+    "loudnorm=I=-16:TP=-1.5:LRA=11"
 )
-VERA_MASTER_AF = "loudnorm=I=-18:TP=-1.5:LRA=7.5"
+# Тон как раньше: +5Hz, скорость -2
+VERA = {"voice": "ru-RU-SvetlanaNeural", "pitch": "+5Hz", "rate_bias": -2, "af": VERA_AF}
 
-# Скорость чуть медленнее. Pitch спокойный и тёплый.
-VERA = {"voice": "ru-RU-SvetlanaNeural", "pitch": "+0Hz", "rate_bias": -4, "af": VERA_AF}
+# Финальный мастеринг (лёгкий — loudnorm уже на сегментах)
+VERA_MASTER_AF = "loudnorm=I=-16:TP=-1.5:LRA=11"
 
 # Параллельные запросы; размер крупного фрагмента; размер маленького первого (быстрый старт).
 CONCURRENCY = int(os.environ.get("TTS_CONCURRENCY", "8"))
