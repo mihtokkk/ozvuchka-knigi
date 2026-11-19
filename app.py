@@ -281,9 +281,35 @@ body { background:#15110e !important; }
   background:#FBFAF7; border:1px solid #B4925A; border-radius:4px;
   padding:16px 30px 22px; margin:0 !important;
   box-shadow:0 0 0 4px #FBFAF7, 0 0 0 5px rgba(180,146,90,.75), 0 18px 44px rgba(10,8,6,.30);
-  animation:salonIn .8s ease-out both;
+  animation:salonIn 1.7s cubic-bezier(.22,1,.36,1) both;
+  transform-origin:50% 48%;
+  will-change:opacity,transform,filter,box-shadow;
 }
-@keyframes salonIn { from { opacity:0 } to { opacity:1 } }
+@keyframes salonIn {
+  0% {
+    opacity:0;
+    transform:translate3d(0,22px,0) scale(.975);
+    filter:blur(7px);
+    box-shadow:0 0 0 4px rgba(251,250,247,0),
+               0 0 0 5px rgba(180,146,90,0),
+               0 10px 26px rgba(10,8,6,0);
+  }
+  55% {
+    opacity:.82;
+    filter:blur(1.2px);
+  }
+  100% {
+    opacity:1;
+    transform:translate3d(0,0,0) scale(1);
+    filter:blur(0);
+    box-shadow:0 0 0 4px #FBFAF7,
+               0 0 0 5px rgba(180,146,90,.75),
+               0 18px 44px rgba(10,8,6,.30);
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  #salon { animation:none; will-change:auto; }
+}
 /* баннер-заголовок */
 #app-banner { text-align:center; margin-bottom:6px; }
 #app-banner .title {
