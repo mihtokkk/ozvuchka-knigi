@@ -14,7 +14,7 @@ except Exception:
     pytesseract = None
 
 # --- Обработка голоса «Вера» ---
-# Тон: тепло, тело, de-ess, pitch +5Hz.
+# Тон: тепло, тело, de-ess, pitch +5Hz (как в рабочей версии).
 # Паузы после предложений чуть длиннее, после запятых — короткие.
 #
 VERA_AF = (
@@ -29,13 +29,16 @@ VERA_AF = (
 VERA_MASTER_AF = "loudnorm=I=-16:TP=-1.5:LRA=11"
 VERA = {"voice": "ru-RU-SvetlanaNeural", "pitch": "+5Hz", "rate_bias": -2, "af": VERA_AF}
 
+# Короткий кроссфейд между фрагментами (только убирает микро-щелчки на стыках).
+CROSSFADE_MS = 20
+
 # Параллельные запросы; размер крупного фрагмента; размер маленького первого (быстрый старт).
 CONCURRENCY = int(os.environ.get("TTS_CONCURRENCY", "8"))
 MAX_CHARS = int(os.environ.get("TTS_MAX_CHARS", "1500"))
 FIRST_CHARS = int(os.environ.get("TTS_FIRST_CHARS", "500"))
 OCR_CONCURRENCY = int(os.environ.get("OCR_CONCURRENCY", "2"))   # сколько фото распознавать разом
 
-SENT_RE = re.compile(r'[^.!?…]+[.!?…]+|\S[^.!?…]*$')
+SENT_RE = re.compile(r'[^.!?…]+(?:[.!?…]+["»”]?|\Z)', re.UNICODE)
 
 def _hard_split(s, n):
     """Режет слишком длинное предложение по словам, не длиннее n символов."""
@@ -141,20 +144,66 @@ async def _make_segment(sem, idx, text, speed, tmpdir, tries=5):
     print("[фрагмент не удался]", idx, flush=True)
     return idx, None
 
+def _apply_short_fades(src, dst, fade_ms=CROSSFADE_MS):
+    """Очень короткие fade-in/out — убирают микро-щелчки на стыках."""
+    fade_s = max(0.012, min(0.035, fade_ms / 1000.0))
+    try:
+        probe = subprocess.run(
+            ["ffprobe", "-v", "quiet", "-show_entries", "format=duration",
+             "-of", "csv=p=0", src],
+            capture_output=True, text=True, check=True
+        )
+        dur = float(probe.stdout.strip())
+        if dur <= fade_s * 2.8:
+            subprocess.run(["ffmpeg", "-y", "-i", src, "-c", "copy", dst],
+                           check=True, capture_output=True)
+            return dst
+        st_out = max(0.0, dur - fade_s)
+        af = f"afade=t=in:st=0:d={fade_s},afade=t=out:st={st_out}:d={fade_s}"
+        subprocess.run(
+            ["ffmpeg", "-y", "-i", src, "-af", af,
+             "-c:a", "libmp3lame", "-b:a", "96k", "-ar", "24000", dst],
+            check=True, capture_output=True
+        )
+        return dst
+    except Exception:
+        try:
+            subprocess.run(["ffmpeg", "-y", "-i", src, "-c", "copy", dst],
+                           check=True, capture_output=True)
+            return dst
+        except Exception:
+            return src
+
 def concat(files, out, fast=False):
-    """Склейка фрагментов. fast=True — потоковая склейка без перекодирования
-    для промежуточного прослушивания; финальный мастеринг выполняется отдельно."""
+    """Склейка фрагментов.
+    fast=True  — быстрая склейка (прогрессивное прослушивание).
+    fast=False — качественная склейка с короткими фейдами на стыках."""
     if len(files) == 1:
         return files[0]
+
+    if fast:
+        listfile = out + ".txt"
+        with open(listfile, "w", encoding="utf-8") as f:
+            for fp in files:
+                f.write("file '%s'\n" % os.path.abspath(fp))
+        cmd = ["ffmpeg", "-y", "-f", "concat", "-safe", "0", "-i", listfile, "-c", "copy", out]
+        subprocess.run(cmd, check=True, capture_output=True)
+        return out
+
+    # Качественный путь: короткие фейды + склейка
+    faded = []
+    tmpdir = os.path.dirname(files[0])
+    for i, fp in enumerate(files):
+        faded_path = os.path.join(tmpdir, "fade_%04d.mp3" % i)
+        faded.append(_apply_short_fades(fp, faded_path))
+
     listfile = out + ".txt"
     with open(listfile, "w", encoding="utf-8") as f:
-        for fp in files:
+        for fp in faded:
             f.write("file '%s'\n" % os.path.abspath(fp))
-    if fast:
-        cmd = ["ffmpeg", "-y", "-f", "concat", "-safe", "0", "-i", listfile, "-c", "copy", out]
-    else:
-        cmd = ["ffmpeg", "-y", "-f", "concat", "-safe", "0", "-i", listfile,
-               "-c:a", "libmp3lame", "-b:a", "96k", "-ar", "24000", out]
+
+    cmd = ["ffmpeg", "-y", "-f", "concat", "-safe", "0", "-i", listfile,
+           "-c:a", "libmp3lame", "-b:a", "96k", "-ar", "24000", out]
     subprocess.run(cmd, check=True, capture_output=True)
     return out
 
@@ -259,9 +308,9 @@ async def generate(text, uploaded_file, speed=0):
     # затем нормализуем уже всю книгу целиком — так громкость не «дышит» на стыках.
     joined = os.path.join(tmpdir, "audiobook_joined.mp3")
     try:
-        joined = await asyncio.to_thread(concat, files, joined, True)
+        joined = await asyncio.to_thread(concat, files, joined, False)  # quality + crossfade
     except Exception:
-        joined = await asyncio.to_thread(concat, files, joined, False)
+        joined = await asyncio.to_thread(concat, files, joined, True)   # fallback
     try:
         final = await asyncio.to_thread(_vera_master, joined, out)
     except Exception as e:
