@@ -308,15 +308,15 @@ body { background:#15110e !important; }
   vector-effect:non-scaling-stroke; opacity:.96;
 }
 #salon .salon-frame-draw .frame-star {
-  fill:#E5C779; stroke:#A9874C; stroke-width:.45;
+  fill:#FFD84D; stroke:#E6B92E; stroke-width:.35;
   transform-box:fill-box; transform-origin:center;
-  opacity:0; animation:frameStar 300ms cubic-bezier(.16,.8,.3,1) 1.8s both;
+  opacity:0; animation:frameStar 304ms cubic-bezier(.16,.8,.3,1) 1.8s both;
 }
 @keyframes frameStar {
-  0% { opacity:0; transform:scale(.12); }
-  24% { opacity:1; transform:scale(1.22); }
-  55% { opacity:.95; transform:scale(.88); }
-  100% { opacity:0; transform:scale(.04); }
+  0% { opacity:0; transform:scale(.10); }
+  22% { opacity:1; transform:scale(1.12); }
+  54% { opacity:.92; transform:scale(.82); }
+  100% { opacity:0; transform:scale(.03); }
 }
 @media (prefers-reduced-motion: reduce) {
   #salon { animation:none; will-change:auto; }
@@ -430,18 +430,18 @@ TITLE_JS = """() => {
       void path.getBoundingClientRect();
       // Во время движения линия заметно светлее и слегка светится;
       // после соединения плавно возвращается к спокойному матовому золоту.
-      path.style.animation = `frameDraw 1.5s cubic-bezier(.42,0,.25,1) .3s forwards, frameGlow 2.6s cubic-bezier(.4,0,.2,1) .3s forwards`;
+      path.style.animation = `frameDraw 1.5s cubic-bezier(.42,0,.25,1) .3s forwards, frameGlow 3.2s cubic-bezier(.4,0,.2,1) .3s forwards`;
     });
     const star = svg.querySelector('.frame-star');
     // Координаты самой звезды задаём непосредственно в SVG-пути:
     // это гарантирует точное положение в центре верхнего соединения.
     const sx = cx, sy = top;
-    star.setAttribute('d', `M ${sx} ${sy-7} L ${sx+1.8} ${sy-1.8} L ${sx+7} ${sy} L ${sx+1.8} ${sy+1.8} L ${sx} ${sy+7} L ${sx-1.8} ${sy+1.8} L ${sx-7} ${sy} L ${sx-1.8} ${sy-1.8} Z`);
+    star.setAttribute('d', `M ${sx} ${sy-4.5} L ${sx+1.15} ${sy-1.15} L ${sx+4.5} ${sy} L ${sx+1.15} ${sy+1.15} L ${sx} ${sy+4.5} L ${sx-1.15} ${sy+1.15} L ${sx-4.5} ${sy} L ${sx-1.15} ${sy-1.15} Z`);
   };
   if (!document.querySelector('#salon-frame-keyframes')) {
     const style = document.createElement('style');
     style.id = 'salon-frame-keyframes';
-    style.textContent = `@keyframes frameDraw { to { stroke-dashoffset:0; } } @keyframes frameGlow { 0% { stroke:#B4925A; filter:none; } 8% { stroke:#F0D58A; filter:drop-shadow(0 0 2px rgba(225,190,105,.85)) drop-shadow(0 0 5px rgba(225,190,105,.45)); } 58% { stroke:#F0D58A; filter:drop-shadow(0 0 2px rgba(225,190,105,.9)) drop-shadow(0 0 6px rgba(225,190,105,.5)); } 69% { stroke:#E8CB7F; filter:drop-shadow(0 0 2px rgba(225,190,105,.75)) drop-shadow(0 0 4px rgba(225,190,105,.35)); } 100% { stroke:#B4925A; filter:none; } }`;
+    style.textContent = `@keyframes frameDraw { to { stroke-dashoffset:0; } } @keyframes frameGlow { 0% { stroke:#B4925A; stroke-width:1.45; filter:none; } 8% { stroke:#F7D978; stroke-width:4.35; filter:drop-shadow(0 0 2px rgba(245,205,105,.95)) drop-shadow(0 0 7px rgba(245,205,105,.65)); } 58% { stroke:#F7D978; stroke-width:4.35; filter:drop-shadow(0 0 2px rgba(245,205,105,.95)) drop-shadow(0 0 7px rgba(245,205,105,.65)); } 66% { stroke:#EACB80; stroke-width:4.35; filter:drop-shadow(0 0 2px rgba(225,190,105,.75)) drop-shadow(0 0 4px rgba(225,190,105,.35)); } 100% { stroke:#B4925A; stroke-width:1.45; filter:none; } }`;
     document.head.appendChild(style);
   }
   const apply = () => { try {
