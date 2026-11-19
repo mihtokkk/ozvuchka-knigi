@@ -304,11 +304,12 @@ body { background:#15110e !important; }
   overflow:visible; pointer-events:none; z-index:20;
 }
 #salon .salon-frame-draw .frame-line {
-  fill:none; stroke:url(#salonGoldMetal); stroke-width:4.35; stroke-linecap:round;
+  fill:none; stroke:#C6A15B; stroke-width:4.35; stroke-linecap:round;
   vector-effect:non-scaling-stroke; opacity:1;
 }
 #salon .salon-frame-draw .frame-star {
-  fill:#FFFDF2; stroke:#FFF0B5; stroke-width:.22;
+  fill:#FFFEF7; stroke:#FFF0B5; stroke-width:.38;
+  filter:drop-shadow(0 0 2px rgba(255,255,238,.98)) drop-shadow(0 0 6px rgba(255,220,128,.92));
   transform-box:fill-box; transform-origin:center;
   opacity:0; animation:frameStar 304ms cubic-bezier(.16,.8,.3,1) 1.8s both;
 }
@@ -407,12 +408,7 @@ TITLE_JS = """() => {
       svg = document.createElementNS('http://www.w3.org/2000/svg','svg');
       svg.setAttribute('class','salon-frame-draw');
       svg.setAttribute('aria-hidden','true');
-      svg.innerHTML = '<defs><linearGradient id="salonGoldMetal" x1="0" y1="0" x2="1" y2="0">' +
-        '<stop offset="0" stop-color="#8A6125"/><stop offset=".16" stop-color="#D4AD58"/>' +
-        '<stop offset=".31" stop-color="#FFF0B5"/><stop offset=".46" stop-color="#B9852F"/>' +
-        '<stop offset=".62" stop-color="#F7E1A0"/><stop offset=".79" stop-color="#A87527"/>' +
-        '<stop offset="1" stop-color="#E6C77B"/></linearGradient></defs>' +
-        '<path class="frame-line left-line"/><path class="frame-line right-line"/>' +
+      svg.innerHTML = '<path class="frame-line left-line"/><path class="frame-line right-line"/>' +
         '<path class="frame-star" d="M0,-7 L1.8,-1.8 L7,0 L1.8,1.8 L0,7 L-1.8,1.8 L-7,0 L-1.8,-1.8 Z"/>';
       salon.appendChild(svg);
     }
@@ -441,12 +437,12 @@ TITLE_JS = """() => {
     // Координаты самой звезды задаём непосредственно в SVG-пути:
     // это гарантирует точное положение в центре верхнего соединения.
     const sx = cx, sy = top;
-    star.setAttribute('d', `M ${sx} ${sy-3.1} L ${sx+.72} ${sy-.72} L ${sx+3.1} ${sy} L ${sx+.72} ${sy+.72} L ${sx} ${sy+3.1} L ${sx-.72} ${sy+.72} L ${sx-3.1} ${sy} L ${sx-.72} ${sy-.72} Z`);
+    star.setAttribute('d', `M ${sx} ${sy-4.1} L ${sx+1.0} ${sy-1.0} L ${sx+4.1} ${sy} L ${sx+1.0} ${sy+1.0} L ${sx} ${sy+4.1} L ${sx-1.0} ${sy+1.0} L ${sx-4.1} ${sy} L ${sx-1.0} ${sy-1.0} Z`);
   };
   if (!document.querySelector('#salon-frame-keyframes')) {
     const style = document.createElement('style');
     style.id = 'salon-frame-keyframes';
-    style.textContent = `@keyframes frameDraw { to { stroke-dashoffset:0; } } @keyframes frameGlow { 0% { stroke-width:4.35; filter:drop-shadow(0 0 1.5px rgba(255,239,185,.62)) drop-shadow(0 0 4px rgba(193,145,58,.34)); } 58% { stroke-width:4.35; filter:drop-shadow(0 0 2.5px rgba(255,244,205,.95)) drop-shadow(0 0 8px rgba(210,164,72,.78)); } 66% { stroke-width:4.35; filter:drop-shadow(0 0 2px rgba(255,239,185,.8)) drop-shadow(0 0 5px rgba(190,139,48,.48)); } 100% { stroke-width:1.45; filter:none; } }`;
+    style.textContent = `@keyframes frameDraw { to { stroke-dashoffset:0; } } @keyframes frameGlow { 0% { stroke-width:4.35; filter:drop-shadow(0 0 2px rgba(255,230,166,.72)) drop-shadow(0 0 5px rgba(179,132,48,.42)); } 58% { stroke-width:4.35; filter:drop-shadow(0 0 3px rgba(255,246,218,.98)) drop-shadow(0 0 9px rgba(205,160,75,.72)); } 66% { stroke-width:4.35; filter:drop-shadow(0 0 2px rgba(255,230,166,.78)) drop-shadow(0 0 5px rgba(179,132,48,.42)); } 100% { stroke-width:1.45; filter:none; } }`;
     document.head.appendChild(style);
   }
   const apply = () => { try {
