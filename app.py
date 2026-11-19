@@ -14,20 +14,26 @@ except Exception:
     pytesseract = None
 
 # --- Обработка голоса «Вера» ---
-# На отдельных фрагментах — только деликатная тональная коррекция и компрессия.
-# Паузы не вырезаем: они часть естественной фразировки синтезатора.
-# Финальную громкость нормализуем один раз на всей книге, а не отдельно по кускам.
+# Тёплый, спокойный голос. Паузы после точек и запятых сильно укорочены.
+# Скорость чуть медленнее обычной.
+#
 VERA_AF = (
-    "highpass=f=65,"
-    "bass=g=1.0:f=160,"
-    "equalizer=f=350:t=q:w=1.0:g=-0.8,"
-    "equalizer=f=2800:t=q:w=1.1:g=0.8,"
-    "equalizer=f=7000:t=q:w=1.0:g=-1.0,"
-    "acompressor=threshold=0.12:ratio=1.5:attack=25:release=300:makeup=1.0"
+    "highpass=f=70:poles=2,"
+    # Сильно укорачиваем паузы: режем всё тише -46dB и длиннее 80 мс
+    # (и после точек, и после запятых)
+    "silenceremove=stop_periods=-1:stop_duration=0.08:stop_threshold=-46dB:detection=rms,"
+    "bass=g=2.0:f=145:t=q:w=0.85,"
+    "equalizer=f=320:t=q:w=1.3:g=-1.3,"
+    "equalizer=f=2400:t=q:w=1.3:g=0.7,"
+    "equalizer=f=6200:t=q:w=1.5:g=-2.2,"
+    "equalizer=f=10500:t=q:w=1.0:g=0.4,"
+    "asoftclip=type=tanh:threshold=0.93,"
+    "acompressor=threshold=0.10:ratio=2.0:attack=28:release=280:makeup=1.5:knee=6"
 )
-VERA_MASTER_AF = "loudnorm=I=-18:TP=-1.5:LRA=7"
-# Голос Вера = Светлана с небольшим сдвигом высоты/темпа + обработка.
-VERA = {"voice": "ru-RU-SvetlanaNeural", "pitch": "+5Hz", "rate_bias": -2, "af": VERA_AF}
+VERA_MASTER_AF = "loudnorm=I=-18:TP=-1.5:LRA=7.5"
+
+# Скорость чуть медленнее (-4). Pitch спокойный.
+VERA = {"voice": "ru-RU-SvetlanaNeural", "pitch": "+1Hz", "rate_bias": -4, "af": VERA_AF}
 
 # Параллельные запросы; размер крупного фрагмента; размер маленького первого (быстрый старт).
 CONCURRENCY = int(os.environ.get("TTS_CONCURRENCY", "8"))
