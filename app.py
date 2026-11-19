@@ -14,8 +14,8 @@ except Exception:
     pytesseract = None
 
 # --- Обработка голоса «Вера» ---
-# Тон как в рабочей версии: тепло, тело, мягкий de-ess.
-# Pitch +5Hz — не «взрослый». Паузы умеренно короткие.
+# Тон как в рабочей версии: тепло, тело, мягкий de-ess, pitch +5Hz.
+# Паузы после запятых и точек короче (0.09 + 50мс тишины).
 #
 VERA_AF = (
     "highpass=f=70,"
@@ -23,15 +23,12 @@ VERA_AF = (
     "equalizer=f=450:t=q:w=1.2:g=1.5,"
     "equalizer=f=6800:t=q:w=1.5:g=-3.5,"
     "acompressor=threshold=0.08:ratio=2:attack=20:release=250:makeup=1.5,"
-    # Паузы короче исходных, но не до нуля (0.12 + оставляем 70мс тишины)
-    "silenceremove=stop_periods=-1:stop_duration=0.12:stop_threshold=-42dB:stop_silence=0.07,"
+    "silenceremove=stop_periods=-1:stop_duration=0.09:stop_threshold=-42dB:stop_silence=0.05,"
     "loudnorm=I=-16:TP=-1.5:LRA=11"
 )
-# Тон как раньше: +5Hz, скорость -2
-VERA = {"voice": "ru-RU-SvetlanaNeural", "pitch": "+5Hz", "rate_bias": -2, "af": VERA_AF}
-
-# Финальный мастеринг (лёгкий — loudnorm уже на сегментах)
 VERA_MASTER_AF = "loudnorm=I=-16:TP=-1.5:LRA=11"
+# Тон: +5Hz, скорость -2
+VERA = {"voice": "ru-RU-SvetlanaNeural", "pitch": "+5Hz", "rate_bias": -2, "af": VERA_AF}
 
 # Параллельные запросы; размер крупного фрагмента; размер маленького первого (быстрый старт).
 CONCURRENCY = int(os.environ.get("TTS_CONCURRENCY", "8"))
