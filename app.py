@@ -279,6 +279,13 @@ body { background:#15110e !important; }
 #random-collage {
   position:fixed; inset:0; z-index:0; overflow:hidden; pointer-events:none;
   background:#15110e;
+  /* Коллаж проявляется одновременно с карточкой и полностью готов к финалу вспышки звезды. */
+  opacity:0; animation:collageIn 2.1s cubic-bezier(.4,0,.2,1) both;
+  will-change:opacity;
+}
+@keyframes collageIn {
+  from { opacity:0; }
+  to   { opacity:1; }
 }
 #random-collage img {
   position:absolute; display:block; height:auto; object-fit:cover;
@@ -323,6 +330,7 @@ body { background:#15110e !important; }
   100% { opacity:0; transform:scale(.03); }
 }
 @media (prefers-reduced-motion: reduce) {
+  #random-collage { animation:none; opacity:1; will-change:auto; }
   #salon { animation:none; will-change:auto; }
   #salon .salon-frame-draw .frame-line { stroke-dasharray:none !important; stroke-dashoffset:0 !important; }
   #salon .salon-frame-draw .frame-star { animation:none; opacity:0; }
